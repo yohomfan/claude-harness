@@ -1,0 +1,204 @@
+<project_specification>
+  <project_name>DevTools — 开发者在线工具箱</project_name>
+
+  <overview>
+    Build a clean, modern developer tools website with 5 essential utilities.
+    All tools run entirely in the browser (no backend needed). The site should
+    have a polished, professional UI with a sidebar navigation, dark/light theme
+    toggle, and responsive design. Each tool page has a consistent layout:
+    title, description, input area, action buttons, and output area.
+  </overview>
+
+  <technology_stack>
+    <frontend>
+      <framework>React with Vite</framework>
+      <styling>Tailwind CSS (via CDN or PostCSS)</styling>
+      <state_management>React hooks (useState, useCallback)</state_management>
+      <routing>React Router v6 for navigation</routing>
+      <port>Only launch on port 5173</port>
+    </frontend>
+    <backend>None — all computation happens client-side</backend>
+  </technology_stack>
+
+  <tools>
+    <tool id="json">
+      <name>JSON 格式化 / 校验 / 压缩</name>
+      <features>
+        - Textarea input for raw JSON
+        - "Format" button: pretty-prints with 2-space indentation
+        - "Minify" button: removes all whitespace
+        - "Validate" indicator: shows valid/invalid with error message and line number
+        - Syntax-highlighted output (use a simple pre/code approach or a lightweight lib)
+        - "Copy" button to copy output to clipboard
+        - "Clear" button to reset both input and output
+        - Real-time validation as user types (debounced)
+        - Show JSON stats: key count, depth, size in bytes
+      </features>
+    </tool>
+
+    <tool id="base64">
+      <name>Base64 编解码</name>
+      <features>
+        - Two textareas: plain text and Base64 encoded text
+        - "Encode" button: converts plain text → Base64
+        - "Decode" button: converts Base64 → plain text
+        - Auto-detect: if input looks like Base64, suggest decode
+        - Support UTF-8 characters (Chinese, emoji, etc.)
+        - Error handling for invalid Base64 input
+        - "Copy" button for output
+        - "Swap" button to exchange input/output
+        - Show encoded size vs original size
+      </features>
+    </tool>
+
+    <tool id="password">
+      <name>随机密码生成器</name>
+      <features>
+        - Length slider (4-128 characters, default 16)
+        - Checkboxes: uppercase, lowercase, numbers, symbols
+        - At least one category must be selected
+        - "Generate" button creates a new password
+        - Password strength indicator (weak/medium/strong/very strong) with color bar
+        - "Copy" button
+        - "Regenerate" button for quick new password
+        - Batch generate: generate multiple passwords at once (1-10)
+        - Exclude ambiguous characters option (0/O, 1/l/I)
+        - Show character composition breakdown
+      </features>
+    </tool>
+
+    <tool id="url">
+      <name>URL 编解码</name>
+      <features>
+        - Two textareas: original URL and encoded URL
+        - "Encode" button: encodeURIComponent
+        - "Decode" button: decodeURIComponent
+        - Full URL encode option (encodeURI vs encodeURIComponent toggle)
+        - URL parser: break down URL into protocol, host, path, query params, hash
+        - Query params displayed as editable key-value table
+        - "Copy" button for output
+        - Error handling for malformed URLs
+      </features>
+    </tool>
+
+    <tool id="timestamp">
+      <name>时间戳转换</name>
+      <features>
+        - Unix timestamp input (seconds or milliseconds auto-detect)
+        - "Now" button: fills current timestamp
+        - Converts to: ISO 8601, local datetime, UTC datetime, relative time ("3 hours ago")
+        - Reverse: date picker / datetime input → Unix timestamp
+        - Show both seconds and milliseconds
+        - Timezone selector (common timezones)
+        - "Copy" buttons for each format
+        - Live clock showing current timestamp updating every second
+      </features>
+    </tool>
+  </tools>
+
+  <ui_layout>
+    <main_structure>
+      - Two-column layout: sidebar (tool navigation) + main content area
+      - Sidebar: logo/title at top, tool links with icons, theme toggle at bottom
+      - Main area: tool title, brief description, input/output sections
+      - Responsive: sidebar collapses to hamburger menu on mobile
+    </main_structure>
+
+    <sidebar>
+      - Width: 240px on desktop, full overlay on mobile
+      - Logo/title: "DevTools" with a wrench icon
+      - Navigation links with icons for each tool
+      - Active link highlighted
+      - Theme toggle (sun/moon icon) at bottom
+      - Collapsible on mobile with hamburger button
+    </sidebar>
+
+    <tool_page_layout>
+      - Tool name as h1 with icon
+      - One-line description
+      - Input section: textarea or input fields
+      - Action buttons row (primary actions + secondary actions)
+      - Output section: textarea or formatted display
+      - All textareas: monospace font, resizable, min-height 150px
+      - Copy buttons use clipboard API with "Copied!" feedback
+    </tool_page_layout>
+  </ui_layout>
+
+  <design_system>
+    <color_palette>
+      Light mode:
+      - Background: white (#ffffff)
+      - Surface: light gray (#f9fafb)
+      - Text: dark gray (#111827)
+      - Primary: indigo (#4f46e5)
+      - Success: green (#10b981)
+      - Error: red (#ef4444)
+      - Border: gray (#e5e7eb)
+
+      Dark mode:
+      - Background: dark (#0f172a)
+      - Surface: dark surface (#1e293b)
+      - Text: light (#f1f5f9)
+      - Primary: indigo (#818cf8)
+      - Success: green (#34d399)
+      - Error: red (#f87171)
+      - Border: slate (#334155)
+    </color_palette>
+
+    <typography>
+      - Sans-serif: Inter or system font stack
+      - Monospace for all code/data: JetBrains Mono, Fira Code, or monospace
+      - Headings: font-bold
+      - Body: font-normal, leading-relaxed
+    </typography>
+
+    <components>
+      <buttons>
+        - Primary: indigo bg, white text, rounded-lg, hover darken
+        - Secondary: border style, hover fill
+        - Icon buttons: ghost style with hover bg
+        - All buttons: transition-colors duration-150
+      </buttons>
+
+      <textareas>
+        - Monospace font
+        - Rounded border
+        - Focus: ring-2 ring-indigo
+        - Dark mode compatible
+        - Min height 150px
+        - Resizable vertically
+      </textareas>
+
+      <feedback>
+        - Copy success: brief "Copied!" tooltip or toast
+        - Errors: red text below the relevant input
+        - Validation: green checkmark or red X icon inline
+      </feedback>
+    </components>
+  </design_system>
+
+  <success_criteria>
+    <functionality>
+      - All 5 tools work correctly with edge cases handled
+      - UTF-8 support across all tools
+      - Clipboard copy works reliably
+      - No console errors during normal use
+      - All tools handle empty input gracefully
+    </functionality>
+
+    <user_experience>
+      - Clean, professional appearance
+      - Responsive on mobile and desktop
+      - Dark/light theme works consistently
+      - Fast — no loading spinners needed (all client-side)
+      - Intuitive layout — a developer can use any tool without instructions
+    </user_experience>
+
+    <technical_quality>
+      - Clean component structure (one component per tool)
+      - No external API calls
+      - Proper error boundaries
+      - Accessible: keyboard navigation, proper labels
+    </technical_quality>
+  </success_criteria>
+</project_specification>
