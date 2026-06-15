@@ -21,22 +21,29 @@ from pathlib import Path
 
 ALLOWED_COMMANDS = {
     # File inspection
-    "ls", "cat", "head", "tail", "wc", "grep",
+    "ls", "cat", "head", "tail", "wc", "grep", "find", "file",
     # File operations
-    "cp", "mkdir", "chmod",
+    "cp", "mkdir", "chmod", "mv", "rm", "touch",
+    # Text processing
+    "echo", "printf", "tee", "sort", "uniq", "tr", "cut", "sed", "awk",
+    "xargs", "jq", "true", "false", "test",
     # Directory
-    "pwd",
+    "pwd", "cd", "basename", "dirname",
     # Node.js development
-    "npm", "node",
+    "npm", "npx", "node", "pnpm",
     # Version control
     "git",
     # Process management
-    "ps", "lsof", "sleep", "pkill",
+    "ps", "lsof", "sleep", "pkill", "kill",
+    # Network (read-only)
+    "curl", "wget",
+    # System
+    "open", "which", "env", "date",
     # Script execution
     "init.sh",
 }
 
-COMMANDS_NEEDING_EXTRA_VALIDATION = {"pkill", "chmod", "init.sh"}
+COMMANDS_NEEDING_EXTRA_VALIDATION = {"pkill", "kill", "chmod", "rm", "init.sh"}
 
 
 def split_command_segments(command_string: str) -> list[str]:
@@ -141,6 +148,36 @@ def validate_chmod_command(command_string: str) -> tuple[bool, str]:
     return True, ""
 
 
+def validate_rm_command(command_string: str) -> tuple[bool, str]:
+    """Validate rm commands - block recursive force delete on dangerous paths."""
+    try:
+        tokens = shlex.split(command_string)
+    except ValueError:
+        return False, "Could not parse rm command"
+
+    # Block rm -rf / or rm -rf ~ or any absolute path outside project
+    dangerous_patterns = ["/", "~", "$HOME", "/etc", "/usr", "/var", "/tmp"]
+    for token in tokens[1:]:
+        if token in dangerous_patterns or (token.startswith("/") and not token.startswith("./")):
+            return False, f"rm on '{token}' is not allowed — only project-relative paths"
+
+    return True, ""
+
+
+def validate_kill_command(command_string: str) -> tuple[bool, str]:
+    """Validate kill commands - only allow killing specific PIDs (no -9 on system processes)."""
+    try:
+        tokens = shlex.split(command_string)
+    except ValueError:
+        return False, "Could not parse kill command"
+
+    # Block kill -9 without a PID
+    if len(tokens) < 2:
+        return False, "kill requires a PID"
+
+    return True, ""
+
+
 def validate_init_script(command_string: str) -> tuple[bool, str]:
     """Validate init.sh script execution."""
     try:
@@ -194,8 +231,12 @@ async def bash_security_hook(input_data, tool_use_id=None, context=None, **kwarg
             cmd_segment = get_command_for_validation(cmd, segments) or command
             if cmd == "pkill":
                 allowed, reason = validate_pkill_command(cmd_segment)
+            elif cmd == "kill":
+                allowed, reason = validate_kill_command(cmd_segment)
             elif cmd == "chmod":
                 allowed, reason = validate_chmod_command(cmd_segment)
+            elif cmd == "rm":
+                allowed, reason = validate_rm_command(cmd_segment)
             elif cmd == "init.sh":
                 allowed, reason = validate_init_script(cmd_segment)
             else:

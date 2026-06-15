@@ -201,4 +201,83 @@
       - Accessible: keyboard navigation, proper labels
     </technical_quality>
   </success_criteria>
+
+  <seo>
+    <meta_tags>
+      - Each tool page MUST have a unique title and meta description
+      - Homepage title: "DevTools — Free Online Developer Tools"
+      - Tool page title format: "{Tool Name} — Free Online Tool | DevTools"
+      - Meta descriptions: concise (150-160 chars), include target keyword
+      - Add Open Graph tags (og:title, og:description, og:type, og:url) for social sharing
+    </meta_tags>
+
+    <structure>
+      - Semantic HTML: use main, nav, article, section, header, footer elements
+      - Each tool page wrapped in article with proper heading hierarchy (h1, h2, h3)
+      - Add a footer with copyright, privacy policy link, and site description
+      - Breadcrumb navigation on tool pages (Home > Tool Name)
+    </structure>
+
+    <sitemap>
+      - Generate a static sitemap.xml in /public listing all tool pages
+      - Include robots.txt in /public allowing all crawlers
+      - Add canonical URLs via link rel="canonical"
+    </sitemap>
+
+    <content>
+      - Each tool page has a "How to Use" section below the tool (2-3 paragraphs)
+      - Each tool page has a FAQ section (3-5 Q&A pairs) using details/summary elements
+      - Add structured data (JSON-LD) with WebApplication schema on each tool page
+      - Homepage has a brief intro paragraph explaining the site purpose
+    </content>
+  </seo>
+
+  <analytics>
+    <google_analytics>
+      - Integrate Google Analytics 4 (GA4) via gtag.js
+      - Use a placeholder Measurement ID: "G-XXXXXXXXXX" (user will replace with real ID)
+      - Load the GA4 script in index.html head with async attribute
+      - Track page views automatically via React Router navigation changes
+      - Custom events for tool usage:
+        - "tool_use" event with parameters: tool_name, action (e.g., "format", "encode", "generate")
+        - "copy_click" event when user copies output
+        - "theme_toggle" event when user switches theme
+    </google_analytics>
+
+    <tracking_component>
+      - Create a reusable analytics utility (src/utils/analytics.js)
+      - Export trackEvent(eventName, params) function
+      - Export trackPageView(pagePath, pageTitle) function
+      - Use in each tool component to track key actions
+      - Guard all gtag calls with typeof check (graceful fallback if blocked)
+    </tracking_component>
+  </analytics>
+
+  <advertising>
+    <google_adsense>
+      - Add AdSense script placeholder in index.html: ca-pub-XXXXXXXXXX (user will replace)
+      - Create a reusable AdBanner component (src/components/AdBanner.jsx)
+      - AdBanner accepts props: slot (ad unit ID), format ("auto"|"horizontal"|"vertical"), responsive (boolean)
+      - Ad placements:
+        1. Below the tool title/description, above the input area (horizontal banner)
+        2. Below the output area, above the FAQ section (horizontal banner)
+        3. Sidebar bottom (vertical banner, desktop only)
+      - AdBanner renders an ins class="adsbygoogle" element with proper data attributes
+      - Call (adsbygoogle = window.adsbygoogle || []).push({}) after mount
+      - Show a subtle placeholder border with "Ad" label when no ad loads (dev mode)
+    </google_adsense>
+  </advertising>
+
+  <privacy>
+    - Create a Privacy Policy page (/privacy) — required by AdSense
+      - Describe data collection: analytics, cookies, ads
+      - Mention third-party services: Google Analytics, Google AdSense
+      - Include contact information placeholder
+    - Create a Cookie Consent banner component
+      - Shows on first visit, stores preference in localStorage
+      - "Accept" and "Manage Preferences" buttons
+      - Only load GA4 and AdSense scripts AFTER consent is given
+      - Minimal, non-intrusive design (fixed bottom bar)
+    - Add Privacy Policy link in the sidebar footer
+  </privacy>
 </project_specification>

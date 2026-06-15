@@ -242,6 +242,9 @@ async def run_loop(
         print(f"\nNext iteration in {AUTO_CONTINUE_DELAY}s...\n")
         await asyncio.sleep(AUTO_CONTINUE_DELAY)
 
+    # Final commit
+    await commit_checkpoint(project_dir)
+
     # Final summary
     print("\n" + "=" * 70)
     print("  LOOP COMPLETE")

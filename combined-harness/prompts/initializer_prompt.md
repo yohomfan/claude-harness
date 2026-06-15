@@ -14,7 +14,7 @@ before proceeding.
 Based on `app_spec.txt`, create a file called `feature_list.json` with detailed
 end-to-end test cases. This file is the single source of truth for what
 needs to be built. Scale the number of tests to the project size — aim for
-50 tests for a small project, 200 for a large one.
+80 tests for a medium project (like this one with 5 tools + SEO + ads + analytics).
 
 **Format:**
 ```json
@@ -33,7 +33,7 @@ needs to be built. Scale the number of tests to the project size — aim for
 ```
 
 **Requirements for feature_list.json:**
-- Scale to project size: ~50 for small projects, ~200 for large ones
+- Scale to project size: ~80 for this medium project (5 tools + SEO + analytics + ads)
 - Both "functional" and "style" categories
 - Mix of narrow tests (2-5 steps) and comprehensive tests (10+ steps)
 - At least 5 tests MUST have 10+ steps each
