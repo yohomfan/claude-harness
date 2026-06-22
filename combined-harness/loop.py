@@ -11,6 +11,7 @@ Each iteration:
 """
 
 import asyncio
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -24,6 +25,18 @@ from prompts import get_initializer_prompt, get_coding_prompt, get_evaluator_pro
 
 
 AUTO_CONTINUE_DELAY = 3
+
+
+def parse_duration(s: str) -> int:
+    """Parse '4h' / '30m' / '90s' / pure int seconds → seconds."""
+    s = s.strip().lower()
+    if s.endswith("h"):
+        return int(float(s[:-1]) * 3600)
+    if s.endswith("m"):
+        return int(float(s[:-1]) * 60)
+    if s.endswith("s"):
+        return int(float(s[:-1]))
+    return int(s)
 
 
 async def run_agent_session(
@@ -120,20 +133,35 @@ async def run_loop(
     project_dir: Path,
     model: str,
     max_iterations: Optional[int] = None,
+    max_runtime_seconds: Optional[int] = None,
+    max_stall: Optional[int] = None,
+    shutdown_event: Optional[asyncio.Event] = None,
 ) -> None:
     """
     Main build-evaluate-feedback loop.
+
+    Exit conditions:
+      - max_iterations reached
+      - max_runtime_seconds reached
+      - max_stall consecutive NEEDS_WORK verdicts
+      - AGENT_QUIT signal file appears in project_dir
+      - shutdown_event is set (e.g. SIGTERM from main.py)
+      - all tests pass
+      - KeyboardInterrupt (handled in main.py)
     """
     print("\n" + "=" * 70)
     print("  COMBINED AUTONOMOUS CODING HARNESS")
     print("  Build → Evaluate → Feedback Loop")
     print("=" * 70)
-    print(f"\n  Project:    {project_dir}")
-    print(f"  Model:      {model}")
-    print(f"  Iterations: {max_iterations or 'Unlimited'}")
+    print(f"\n  Project:     {project_dir}")
+    print(f"  Model:       {model}")
+    print(f"  Iterations:  {max_iterations or 'Unlimited'}")
+    print(f"  Max runtime: {max_runtime_seconds or 'Unlimited'}{'s' if max_runtime_seconds else ''}")
+    print(f"  Max stall:   {max_stall or 'Unlimited'}")
 
     # Operator controls
-    print(f"\n  Kill switch:  touch {project_dir}/AGENT_STOP")
+    print(f"\n  Pause:        touch {project_dir}/AGENT_STOP")
+    print(f"  Hard quit:    touch {project_dir}/AGENT_QUIT")
     print(f"  Steer agent:  echo 'new direction' > {project_dir}/STEER.md")
     print()
 
@@ -155,24 +183,45 @@ async def run_loop(
 
     iteration = 0
     findings: Optional[str] = None  # Evaluator feedback carried forward
+    consecutive_stall = 0
+    start_time = time.monotonic()
+    exit_reason: Optional[str] = None
 
     while True:
         iteration += 1
+
+        # === Exit conditions ===
         if max_iterations and iteration > max_iterations:
-            print(f"\nReached max iterations ({max_iterations})")
+            exit_reason = f"Reached max iterations ({max_iterations})"
             break
 
-        # Check kill switch before starting
+        if max_runtime_seconds is not None:
+            elapsed = time.monotonic() - start_time
+            if elapsed >= max_runtime_seconds:
+                exit_reason = f"Reached max runtime ({elapsed:.0f}s / {max_runtime_seconds}s)"
+                break
+
+        if shutdown_event is not None and shutdown_event.is_set():
+            exit_reason = "SIGTERM received"
+            break
+
+        quit_file = project_dir / "AGENT_QUIT"
+        if quit_file.exists():
+            quit_file.unlink()
+            exit_reason = "AGENT_QUIT signal received"
+            break
+
+        # === Pause (does NOT exit, polls until released) ===
         if (project_dir / "AGENT_STOP").exists():
             print("\nKill switch engaged. Remove AGENT_STOP to resume.")
             await asyncio.sleep(60)
             iteration -= 1  # Don't count this
             continue
 
-        # Check if all tests pass
+        # === Natural completion ===
         passing, total = count_passing_tests(project_dir)
         if total > 0 and passing == total:
-            print(f"\nAll {total} tests passing! Project complete.")
+            exit_reason = f"All {total} tests passing"
             break
 
         # =============================================
@@ -232,11 +281,19 @@ async def run_loop(
             if eval_findings:
                 print(f"  Evidence: {eval_findings[:200]}")
             findings = None
+            consecutive_stall = 0
         else:
             print("\n  >>> EVALUATOR VERDICT: NEEDS_WORK <<<")
             if eval_findings:
                 print(f"  Findings: {eval_findings[:500]}")
             findings = eval_findings  # Inject into next builder prompt
+            consecutive_stall += 1
+            if max_stall and consecutive_stall >= max_stall:
+                exit_reason = (
+                    f"{consecutive_stall} consecutive NEEDS_WORK verdicts "
+                    f"(max-stall={max_stall})"
+                )
+                break
 
         print_progress_summary(project_dir)
         print(f"\nNext iteration in {AUTO_CONTINUE_DELAY}s...\n")
@@ -247,7 +304,7 @@ async def run_loop(
 
     # Final summary
     print("\n" + "=" * 70)
-    print("  LOOP COMPLETE")
+    print(f"  LOOP COMPLETE — {exit_reason or 'finished'}")
     print("=" * 70)
     print(f"\n  Project: {project_dir}")
     print_progress_summary(project_dir)

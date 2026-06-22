@@ -118,24 +118,40 @@ my_new_app/
 ```bash
 PROJECT=combined-harness/generations/my_new_app
 
-# 紧急停止（下次工具调用前就被 kill-switch hook 拒绝）
+# === 暂停（可恢复）：60 秒轮询一次，rm 后继续 ===
 touch $PROJECT/AGENT_STOP
-
-# 解除停止
 rm $PROJECT/AGENT_STOP
 
-# 注入新指令——会通过 steer hook 插到 Agent 上下文里，读完自动清空
+# === 硬退出（不可恢复）：跑完当前 iteration 就 break，进程退出 ===
+touch $PROJECT/AGENT_QUIT
+
+# === 注入新指令（通过 steer hook，读完自动清空）===
 echo "改用 TypeScript，并补单元测试" > $PROJECT/STEER.md
 
-# 看当前进度
+# === 看当前进度 ===
 python -c "import json; d=json.load(open('$PROJECT/feature_list.json')); print(sum(t['passes'] for t in d),'/',len(d))"
 
-# 看 commit 历史
+# === 看 commit 历史 ===
 git -C $PROJECT log --oneline
 
-# 跑完后启动生成的应用
+# === 跑完后启动生成的应用 ===
 cd $PROJECT && ./init.sh
 ```
+
+### 全部退出方式
+
+| 方式 | 触发 | 语义 | 是否可恢复 |
+|---|---|---|---|
+| `Ctrl+C` | 终端按键 | 立即中断 asyncio loop | ✓ 跑相同命令续上 |
+| `touch AGENT_STOP` | 信号文件 | **暂停**，60s 轮询，loop 不退出 | ✓ `rm` 后继续 |
+| `touch AGENT_QUIT` | 信号文件 | 跑完当前 iteration 后退出 | ✗ 进程结束 |
+| `kill <pid>` | SIGTERM | 收到信号后跑完当前 iteration 退出 | ✗ 进程结束 |
+| `--max-iterations N` | 启动参数 | 跑满 N 轮自动退出 | ✗ 进程结束 |
+| `--max-runtime 4h` | 启动参数 | 墙钟时间到自动退出 | ✗ 进程结束 |
+| `--max-stall N` | 启动参数 | 连续 N 次 NEEDS_WORK 后退出 | ✗ 进程结束 |
+| 全部 test PASS | 自动 | 所有用例通过自然终止 | ✗ 任务完成 |
+
+`AGENT_QUIT` / SIGTERM / `--max-*` 都会跑最终 `commit_checkpoint` + 输出 `LOOP COMPLETE — <原因>` 摘要，不会留烂尾。
 
 ---
 
@@ -145,6 +161,8 @@ cd $PROJECT && ./init.sh
 |---|---|---|
 | `--project-dir` | 项目生成目录；相对路径会拼到 `generations/` 下 | `./project` |
 | `--max-iterations` | 最大循环轮数 | 无限 |
+| `--max-runtime` | 墙钟时间上限，支持 `4h` / `30m` / `90s` / 纯秒数 | 无限 |
+| `--max-stall` | 连续 N 次 NEEDS_WORK 后自动退出，防卡死 | 关闭 |
 | `--model` | Claude 模型 ID | `claude-sonnet-4-5-20250929` |
 
 ---
