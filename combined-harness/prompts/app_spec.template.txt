@@ -1,0 +1,209 @@
+<!--
+  =================================================================
+  APP SPEC TEMPLATE — fill this in for your new project
+  =================================================================
+
+  使用方式：
+    cp app_spec.template.txt app_spec.txt
+    然后填充每一段；标 [REQUIRED] 的必填，[OPTIONAL] 可整段删掉。
+
+  这份文件会被 Initializer Agent 读取一次，并据此生成 ~80 条 e2e
+  测试用例（feature_list.json）。**写得越具体，生成的测试越准。**
+
+  几条经验：
+  1. 钉死技术栈与端口。不要让 Agent 在 React / Vue 之间自己选；
+     不要让它在 3000/5173/8080 之间随机挑——后续截图脚本要写死 URL。
+  2. 钉死颜色（hex）和字体。"现代风格" 是不可验证的；
+     "#4f46e5 indigo, Inter font" 是可验证的。
+  3. <features> 段每条 feature 列出具体行为、边界条件、错误处理。
+     "用户能登录" 太虚；"邮箱+密码表单，邮箱格式校验，成功跳 /dashboard，
+     失败在表单下方显示红色错误" 才能拆成测试。
+  4. 不要自己写测试用例——Initializer 会从 spec 推。你的活是写 spec。
+  5. 当前 harness 用 Puppeteer 截图作为证据，所以这套模板默认目标是
+     **Web 应用**。其他形态（CLI / 桌面）需要额外改 hooks。
+  =================================================================
+-->
+
+<project_specification>
+
+  <project_name>{{ 项目名 / 应用名 }}</project_name>
+
+  <!-- [REQUIRED] 2-4 句话：这个应用做什么、给谁用、核心价值。
+       不要在这里列功能清单（功能放 <features>）。 -->
+  <overview>
+    {{ 一段话描述应用的高层目标，例如：
+       "一个面向开发者的本地代码笔记应用，支持 Markdown + 代码高亮，
+        数据全部本地存储，不联网。" }}
+  </overview>
+
+  <!-- [REQUIRED] 钉死技术栈，避免 Agent 临场选型导致每轮风格漂移。 -->
+  <technology_stack>
+    <frontend>
+      <framework>{{ 例：React + Vite / Next.js / Vue 3 + Vite / 原生 HTML }}</framework>
+      <styling>{{ 例：Tailwind CSS (CDN) / CSS Modules / styled-components }}</styling>
+      <state_management>{{ 例：React hooks / Redux Toolkit / Zustand / none }}</state_management>
+      <routing>{{ 例：React Router v6 / Next.js File Routing / none }}</routing>
+      <port>{{ 唯一启动端口，例 5173 }}</port>
+    </frontend>
+    <backend>{{ 例："None — 纯客户端" / "Express + SQLite，端口 3001" }}</backend>
+    <data_storage>{{ 例：localStorage / IndexedDB / SQLite / Postgres / none }}</data_storage>
+  </technology_stack>
+
+  <!-- [REQUIRED] 核心功能列表。
+       根据应用形态选择嵌套结构：
+         - 工具集 / 仪表板：<tools><tool id="..."> 见下面 example
+         - 多页站点：<pages><page id="...">
+         - 流程类应用：<workflows><workflow id="...">
+       每条 feature 写到能拆出 5-15 条 e2e 测试的颗粒度。 -->
+  <features>
+
+    <tool id="example-feature-1">
+      <name>{{ 功能名 }}</name>
+      <description>{{ 一句话描述 }}</description>
+      <details>
+        - {{ 具体行为 1，例："点击 Format 按钮时，使用 2 空格缩进美化 JSON" }}
+        - {{ 具体行为 2 }}
+        - {{ 边界条件，例："输入为空时显示提示，不报错" }}
+        - {{ 错误处理，例："JSON 非法时高亮错误行号并展示原因" }}
+        - {{ UI 反馈，例："复制成功时弹 'Copied!' toast，2 秒后消失" }}
+        - {{ 可访问性，例："所有按钮支持键盘 Tab 聚焦" }}
+      </details>
+    </tool>
+
+    <tool id="example-feature-2">
+      <name>{{ ... }}</name>
+      <description>{{ ... }}</description>
+      <details>
+        - {{ ... }}
+      </details>
+    </tool>
+
+  </features>
+
+  <!-- [REQUIRED for web apps] UI 整体结构。Evaluator 会根据这段对照截图。 -->
+  <ui_layout>
+    <main_structure>
+      {{ 例：
+         - 两栏布局：左侧 240px sidebar + 右侧主内容区
+         - 顶部 header 高 60px，包含 logo / 搜索框 / 用户头像
+         - 主内容区最大宽度 1200px，居中 }}
+    </main_structure>
+
+    <navigation>
+      {{ 例：sidebar 列出所有工具，当前页高亮，移动端折叠为汉堡菜单 }}
+    </navigation>
+
+    <responsive>
+      {{ 例：断点 md=768px / lg=1024px；移动端 sidebar 变为 overlay }}
+      {{ 或："仅桌面端，最小宽度 1024px" }}
+    </responsive>
+  </ui_layout>
+
+  <!-- [REQUIRED] 设计系统。具体到 hex 和字体名，避免 "现代/简洁/优雅" 这种不可验证表述。 -->
+  <design_system>
+    <color_palette>
+      {{ Light mode:
+         - Background: #ffffff
+         - Surface: #f9fafb
+         - Text: #111827
+         - Primary: #4f46e5
+         - Success: #10b981
+         - Error: #ef4444
+         - Border: #e5e7eb
+
+         Dark mode:
+         - ...（如不支持暗色模式可删除）}}
+    </color_palette>
+
+    <typography>
+      {{ 例：
+         - 正文：Inter, system-ui, sans-serif
+         - 等宽：JetBrains Mono, Fira Code, monospace
+         - h1: 24px / 700 / 1.2
+         - body: 14px / 400 / 1.5 }}
+    </typography>
+
+    <components>
+      {{ 描述按钮、表单、输入框等通用组件的规范，
+         如圆角、边框、focus 态、hover 态、过渡时长 }}
+    </components>
+  </design_system>
+
+  <!-- [REQUIRED] Evaluator 会显式读这段。
+       条目要"从外部可观察"——不要写"用了 useMemo"这种内部细节。 -->
+  <success_criteria>
+    <functionality>
+      - {{ 例：所有核心功能在主流浏览器（Chrome / Safari / Firefox）正常工作 }}
+      - {{ 例：UTF-8 / 中文 / emoji 输入支持 }}
+      - {{ 例：表单验证、错误提示、空状态都有处理 }}
+      - {{ 例：无 console error / warning }}
+    </functionality>
+
+    <user_experience>
+      - {{ 例：响应式适配移动端 }}
+      - {{ 例：交互延迟 < 100ms，无加载转圈 }}
+      - {{ 例：键盘可达，支持 Tab / Enter / Escape }}
+    </user_experience>
+
+    <technical_quality>
+      - {{ 例：每个 feature 一个独立组件 }}
+      - {{ 例：无对外 API 调用 }}
+      - {{ 例：有适当的 Error Boundary }}
+    </technical_quality>
+  </success_criteria>
+
+  <!-- ===============================================================
+       下面是 [OPTIONAL] 段落，按需保留或整段删除
+       =============================================================== -->
+
+  <!-- [OPTIONAL] 只在做公开访问的网站时才需要 -->
+  <seo>
+    <meta_tags>
+      {{ 标题 / 描述 / OG tags 的格式规范 }}
+    </meta_tags>
+    <structure>
+      {{ 语义化 HTML 要求、面包屑、heading 层级 }}
+    </structure>
+    <sitemap>
+      {{ sitemap.xml / robots.txt / canonical URL 要求 }}
+    </sitemap>
+    <content>
+      {{ 每页是否需要 How-to / FAQ / JSON-LD 结构化数据 }}
+    </content>
+  </seo>
+
+  <!-- [OPTIONAL] 集成 Analytics 才保留 -->
+  <analytics>
+    <provider>{{ 例：Google Analytics 4 (gtag.js) / Plausible / 无 }}</provider>
+    <placeholder_id>{{ 例：G-XXXXXXXXXX，用户替换为真实 ID }}</placeholder_id>
+    <events_to_track>
+      - {{ 事件名 + 参数，例：tool_use {tool_name, action} }}
+      - {{ ... }}
+    </events_to_track>
+    <integration>
+      {{ 例：所有 gtag 调用必须 typeof check，阻塞时优雅降级 }}
+    </integration>
+  </analytics>
+
+  <!-- [OPTIONAL] 集成广告才保留 -->
+  <advertising>
+    <provider>{{ 例：Google AdSense }}</provider>
+    <placeholder_publisher_id>{{ ca-pub-XXXXXXXXXX }}</placeholder_publisher_id>
+    <placements>
+      - {{ 位置 1：例 "工具标题下方，输入区上方，水平 banner" }}
+      - {{ 位置 2 }}
+    </placements>
+    <component>
+      {{ 例：抽 AdBanner 组件，接受 slot / format / responsive props }}
+    </component>
+  </advertising>
+
+  <!-- [OPTIONAL] 上面 analytics / ads 任一启用时强烈建议保留（合规需要） -->
+  <privacy>
+    {{ 例：
+       - /privacy 页面：列出数据收集说明、第三方服务、联系方式
+       - Cookie Consent 横幅：首次访问展示，同意后才加载 GA / AdSense
+       - sidebar footer 添加隐私政策入口 }}
+  </privacy>
+
+</project_specification>

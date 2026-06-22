@@ -59,13 +59,15 @@ EVAL   → 独立 Evaluator Agent 从零上下文审查（只读权限）
 FEED   → Evaluator 的 NEEDS_WORK 反馈注入下一轮 Builder prompt
 ```
 
-- **入口**：[combined-harness/main.py](combined-harness/main.py)
-- **核心实现**：
-  - 主循环：[combined-harness/loop.py](combined-harness/loop.py)
-  - Builder（全权工具 + Puppeteer）：[combined-harness/builder.py](combined-harness/builder.py)
-  - Evaluator（仅 Read/Glob/Grep/Bash）：[combined-harness/evaluator.py](combined-harness/evaluator.py)
-  - 所有 hooks：[combined-harness/hooks.py](combined-harness/hooks.py)
-- **示例规格**：[combined-harness/prompts/app_spec.txt](combined-harness/prompts/app_spec.txt) —— 一个包含 5 个工具（JSON / Base64 / 密码生成 / URL 编解码 / 时间戳）的 DevTools 网站。
+📖 **完整使用文档、架构图、定制点、常见问题** → [combined-harness/README.md](combined-harness/README.md)  
+📄 **写自己的 spec 起点** → [combined-harness/prompts/app_spec.template.txt](combined-harness/prompts/app_spec.template.txt)
+
+简要入口：
+- 主程序：[combined-harness/main.py](combined-harness/main.py)
+- 主循环：[combined-harness/loop.py](combined-harness/loop.py)
+- Builder（全权工具 + Puppeteer）：[combined-harness/builder.py](combined-harness/builder.py)
+- Evaluator（仅 Read/Glob/Grep/Bash）：[combined-harness/evaluator.py](combined-harness/evaluator.py)
+- 示例规格（DevTools 网站）：[combined-harness/prompts/app_spec.txt](combined-harness/prompts/app_spec.txt)
 
 ---
 
@@ -146,77 +148,22 @@ while true; do claude -p "continue from PROGRESS.md"; done
 
 > **关键**：这条路径的 init 是"半自动"的——你只写一份产品规格文本（`app_spec.txt`），剩下的 80~200 条 end-to-end test case、项目骨架、`init.sh` 启动脚本都是 **Initializer Agent 在第一次运行时自动生成的**。
 
-**初始化步骤：**
+**最小三步：**
 
 ```bash
-# 1. 装依赖
-cd /path/to/claude-harness/combined-harness
+cd combined-harness
 pip install -r requirements.txt
 
-# 2. 改 prompts/app_spec.txt 描述你想要的应用（这是唯一必改的文件）
-#    当前是 DevTools 网站的 spec，照着 XML 结构改成你的产品
+# 基于模板写自己的 spec
+cp prompts/app_spec.template.txt prompts/app_spec.txt
 vim prompts/app_spec.txt
 
-# 3. （可选）调整 Initializer 生成的 test case 规模
-vim prompts/initializer_prompt.md
-#    把里面的 "80 tests" 改成你想要的数量（小项目 20-30，大项目 200+）
-
-# 4. （可选）调整 Evaluator 的审查侧重
-vim prompts/evaluator_prompt.md
-
-# 5. 启动（第一次跑会自动初始化）
+# 启动（第一次跑会自动初始化项目骨架 + 生成 80~200 条 e2e 测试）
 python main.py --project-dir ./my_new_app
-#    生成产物会落在 combined-harness/generations/my_new_app/
-#    如想放别处，传绝对路径：--project-dir /abs/path/to/my_new_app
 ```
 
-**第一次运行（Initializer 阶段）会发生什么：**
-
-1. harness 把 `prompts/app_spec.txt` 拷到 `generations/my_new_app/app_spec.txt`
-2. Initializer Agent 启动、读 spec
-3. 生成 `feature_list.json`（80~200 条带步骤的 e2e test case）—— **这步要 10~20 分钟**，看起来像卡住了其实在写
-4. 生成 `init.sh`（项目启动脚本）
-5. `git init` + 首次 commit
-6. 搭建项目骨架（`package.json`、目录结构等）
-
-**之后每轮（Build → Evaluate → Feedback）：**
-
-1. **Build**：Builder Agent 全新 context，读 `feature_list.json`，挑一个 `passes: false` 的 feature 实现，截图为证
-2. **Commit**：harness 自动 `git commit -am "session checkpoint: <时间>"`
-3. **Evaluate**：Evaluator Agent 全新 context，只有 Read/Glob/Grep/Bash 权限，输出第一行 `PASS` 或 `NEEDS_WORK`
-4. **Feedback**：如果 NEEDS_WORK，详细反馈会拼到下一轮 Builder 的 prompt 开头
-5. 循环直到所有 test 通过，或你 `Ctrl+C` 中断
-
-**中断与恢复**：直接 `Ctrl+C`，跑相同命令即可继续——状态全在 `feature_list.json` + git 里。
-
-**运行时操作**（Path A、B 都适用，文件放在 `--project-dir` 下）：
-
-```bash
-PROJECT=combined-harness/generations/my_new_app
-
-# 紧急停止（下一次工具调用就被拒绝）
-touch $PROJECT/AGENT_STOP
-
-# 解除停止
-rm $PROJECT/AGENT_STOP
-
-# 注入新指令——下次工具调用前会被插到 Agent 上下文里，读完自动清空
-echo "改用 TypeScript，并加上单元测试" > $PROJECT/STEER.md
-
-# 看当前进度
-python -c "import json; d=json.load(open('$PROJECT/feature_list.json')); print(sum(t['passes'] for t in d),'/',len(d))"
-
-# 看 commit 历史
-git -C $PROJECT log --oneline
-```
-
-**跑完后启动生成的应用：**
-
-```bash
-cd combined-harness/generations/my_new_app
-./init.sh         # Initializer 已经为你写好这个脚本
-# 或手动 npm install && npm run dev
-```
+📖 **完整文档**（架构图、所有定制点、运行时操作、常见问题）→ [combined-harness/README.md](combined-harness/README.md)  
+📄 **spec 写作模板**（含逐段说明与示例）→ [combined-harness/prompts/app_spec.template.txt](combined-harness/prompts/app_spec.template.txt)
 
 ---
 
