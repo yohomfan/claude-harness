@@ -165,7 +165,7 @@ async def run_loop(
         # Check kill switch before starting
         if (project_dir / "AGENT_STOP").exists():
             print("\nKill switch engaged. Remove AGENT_STOP to resume.")
-            await asyncio.sleep(5)
+            await asyncio.sleep(60)
             iteration -= 1  # Don't count this
             continue
 
