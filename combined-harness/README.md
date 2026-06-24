@@ -1,12 +1,116 @@
-# Combined Harness — Builder + Evaluator + Feedback Loop
+# Combined Harness — Autonomous Coding with Feedback Loop
 
-把 [autonomous-coding](../autonomous-coding/) 的 Python 自动循环与 [claude-code-config](../claude-code-config/) 的 hooks 原语**合并**，并新增**独立 Evaluator Agent**，构成完整的反馈闭环。
+让 Claude 自主编码数小时：写一份 spec，启动 harness，回来看成品。
 
-> 📖 总览与三个 harness 的对比请看 [上层 README](../README.md)。
+```
+BUILD  →  COMMIT  →  EVALUATE  →  FEEDBACK  →  循环
+ Builder     git       Evaluator     注入下轮
+  Agent    checkpoint    Agent       Builder prompt
+```
 
 ---
 
-## 架构一览
+## Quick Start（3 步开始）
+
+### 0. 前置准备
+
+```bash
+npm install -g @anthropic-ai/claude-code    # Claude Code CLI
+export ANTHROPIC_API_KEY='sk-ant-...'        # API Key
+cd combined-harness && pip install -r requirements.txt
+```
+
+### 1. 初始化项目
+
+```bash
+python harness.py init my-app
+```
+
+这会在 `generations/my-app/` 下创建项目目录，并拷贝一份 spec 模板。
+
+### 2. 编写你的 spec
+
+打开 `generations/my-app/app_spec.txt`，按模板填写你的产品规格。**这是唯一需要你手写的文件**，写得越详细，Agent 生成的测试和代码质量越高。
+
+> 模板说明见 [prompts/app_spec.template.txt](prompts/app_spec.template.txt)
+
+### 3. 启动
+
+```bash
+python harness.py run my-app
+```
+
+第一次运行会自动：生成测试用例（`feature_list.json`）→ 搭建项目骨架 → 开始逐个实现 feature。
+
+**想看实时进度？** 另开一个终端：
+
+```bash
+python harness.py dashboard my-app
+# 浏览器打开 http://localhost:8077
+```
+
+---
+
+## 所有命令一览
+
+| 命令 | 作用 |
+|---|---|
+| `python harness.py init <project>` | 创建新项目，拷贝 spec 模板 |
+| `python harness.py run <project>` | 启动 Build → Evaluate → Feedback 循环 |
+| `python harness.py dashboard <project>` | 打开 Web 看板（实时监控） |
+| `python harness.py stop <project> [action]` | 暂停 / 恢复 / 退出 / 查看状态 |
+| `python harness.py steer <project> <message>` | 运行中注入新指令 |
+
+### run 参数
+
+```bash
+python harness.py run my-app \
+  --max-iterations 10 \      # 最多跑 10 轮
+  --max-runtime 4h \          # 最多跑 4 小时
+  --max-stall 3 \             # 连续 3 次 NEEDS_WORK 就停
+  --model claude-opus-4-7 \   # 用更强的模型
+  --puppeteer                  # 启用浏览器测试（Web 项目）
+```
+
+### stop 操作
+
+```bash
+python harness.py stop my-app pause    # 暂停（60s 内生效，可恢复）
+python harness.py stop my-app resume   # 恢复
+python harness.py stop my-app quit     # 跑完当前轮后退出
+python harness.py stop my-app status   # 查看当前状态
+python harness.py stop my-app          # 默认 = status
+```
+
+### steer（运行中改方向）
+
+```bash
+python harness.py steer my-app "改用 TypeScript，并补单元测试"
+```
+
+Agent 会在下次工具调用时读到这条指令并调整行为。
+
+---
+
+## Web 看板（Dashboard）
+
+```bash
+python harness.py dashboard my-app
+# 或指定端口：python harness.py dashboard my-app --port 9000
+```
+
+看板展示：
+- **状态卡片**：当前轮次、阶段（BUILD/EVALUATE/PAUSED）、通过率、运行时长
+- **趋势图**：通过率变化曲线 + 每轮 Build 耗时（Chart.js）
+- **评估时间线**：每轮 PASS/NEEDS_WORK 结果及反馈摘要
+- **Feature 列表**：所有测试用例，支持 All/Passing/Failing 筛选
+- **Git 时间线**：最近 30 条 commit
+
+数据每 5 秒自动刷新。看板是只读的，不影响 harness 运行。
+
+---
+
+## 架构
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -22,166 +126,63 @@
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- **Builder Agent**（`builder.py`）：全权工具（Read / Write / Edit / Bash + Puppeteer MCP），系统 Prompt 中明确告诉它"有独立 Evaluator 会审查你的工作"
-- **Evaluator Agent**（`evaluator.py`）：**只读权限**（Read / Glob / Grep / Bash），不会被 Builder 自述影响，第一行输出 `PASS` 或 `NEEDS_WORK`
-- **反馈注入**：`NEEDS_WORK` 的反馈会拼到下一轮 Builder prompt 开头，强制先修问题再做新 feature
+- **Builder Agent**：全权工具（Read / Write / Edit / Bash），可选 Puppeteer MCP
+- **Evaluator Agent**：**只读权限**（Read / Glob / Grep / Bash），独立审查，第一行输出 `PASS` 或 `NEEDS_WORK`
+- **反馈注入**：`NEEDS_WORK` 反馈拼到下一轮 Builder prompt 开头
+
+### 安全机制（Hooks）
+
+| Hook | 作用 |
+|---|---|
+| `kill_switch_hook` | `AGENT_STOP` 文件存在时阻断所有工具调用 |
+| `steer_hook` | 读取 `STEER.md` 注入指令后清空 |
+| `bash_security_hook` | Bash 命令白名单（npm/node/git/ls/cat 等） |
+| `track_read_hook` | 记录证据文件（截图/日志）读取记录 |
+| `verify_gate_hook` | 未读证据前不允许标记测试通过 |
 
 ---
 
-## 快速开始
+## 退出方式
 
-### 前置准备
-
-```bash
-# 1. Claude Code CLI（最新版）
-npm install -g @anthropic-ai/claude-code
-
-# 2. API Key
-export ANTHROPIC_API_KEY='sk-ant-...'
-
-# 3. Python 依赖
-cd combined-harness
-pip install -r requirements.txt
-
-# 4. Chrome（macOS 默认路径在 builder.py 中已配置）
-ls "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-```
-
-### 初始化新项目（核心三步）
-
-```bash
-# Step 1：基于模板写你的 spec
-cp prompts/app_spec.template.txt prompts/app_spec.txt
-vim prompts/app_spec.txt   # 填充你的产品规格
-
-# Step 2：（可选）调整 Initializer 期望的测试规模
-vim prompts/initializer_prompt.md
-#  把 "80 tests" 改成 20-30（小项目）/ 200+（大项目）
-
-# Step 3：启动
-python main.py --project-dir ./my_new_app
-#  生成产物默认落在 combined-harness/generations/my_new_app/
-#  绝对路径示例：--project-dir /Users/you/projects/my_app
-```
-
-> 📄 写 spec 的模板与规则见 [prompts/app_spec.template.txt](prompts/app_spec.template.txt)。  
-> 当前 [prompts/app_spec.txt](prompts/app_spec.txt) 是一份"DevTools 网站"的实际 spec，可参考。
-
----
-
-## 第一次运行会发生什么（Initializer 阶段）
-
-1. 把 `prompts/app_spec.txt` 拷到 `generations/my_new_app/app_spec.txt`
-2. **Initializer Agent** 启动、读 spec
-3. 生成 `feature_list.json`（80~200 条带步骤的 e2e test case）—— **这步要 10~20 分钟**，看起来像卡住了其实在写
-4. 生成 `init.sh`（项目启动脚本，未来 Agent 用它一键起项目）
-5. `git init` + 首次 commit
-6. 搭建项目骨架（package.json、目录结构等）
-
-第一次跑完之后，`generations/my_new_app/` 长这样：
-
-```
-my_new_app/
-├── app_spec.txt              # 拷自 prompts/ 的产品规格
-├── feature_list.json         # 单一真源：所有测试用例
-├── init.sh                   # Initializer 写的启动脚本
-├── claude-progress.txt       # Session 间的进度笔记
-├── .claude_settings.json     # Builder 用的安全设置（auto-generated）
-├── .claude_evaluator_settings.json  # Evaluator 用的安全设置
-├── .git/                     # 第一次 commit 已完成
-└── (项目骨架文件，如 package.json、src/ 等)
-```
-
----
-
-## 之后每轮（Build → Evaluate → Feedback）
-
-每个循环 iteration 跑这四个 phase：
-
-| Phase | 谁 | 做什么 |
+| 方式 | 语义 | 可恢复 |
 |---|---|---|
-| **BUILD** | Builder Agent（全新 context） | 读 `feature_list.json`，挑一个 `passes: false` 的 feature 实现，用 Puppeteer 截图作证据 |
-| **COMMIT** | harness | 自动 `git commit -am "session checkpoint: <时间>"` |
-| **EVALUATE** | Evaluator Agent（全新 context） | 只能 Read / Glob / Grep / Bash，第一行输出 `PASS` 或 `NEEDS_WORK` + 详细反馈 |
-| **FEEDBACK** | harness | `NEEDS_WORK` 时，反馈拼进下一轮 Builder prompt 开头 |
+| `Ctrl+C` | 立即中断 | ✓ 跑 `run` 续上 |
+| `harness.py stop ... pause` | 暂停，60s 轮询 | ✓ `resume` 恢复 |
+| `harness.py stop ... quit` | 跑完当前轮退出 | ✗ |
+| `--max-iterations N` | 跑满 N 轮 | ✗ |
+| `--max-runtime 4h` | 墙钟时间到 | ✗ |
+| `--max-stall N` | 连续 N 次 NEEDS_WORK | ✗ |
+| 全部 test PASS | 自然完成 | ✗ |
 
-循环条件：所有 test 通过 / 你 Ctrl+C / 达到 `--max-iterations`。
-
-**中断与恢复**：直接 `Ctrl+C`，跑相同命令即可继续——状态在 `feature_list.json` + git 里。
-
----
-
-## 运行时操作
-
-### 使用 stop.sh 脚本（推荐）
-
-```bash
-# 暂停（agent 在下次轮询时停住，最多 60s）
-./stop.sh ./generations/my_new_app pause
-
-# 恢复
-./stop.sh ./generations/my_new_app resume
-
-# 退出（跑完当前 iteration 后进程结束）
-./stop.sh ./generations/my_new_app quit
-
-# 查看当前状态（暂停/退出信号 + 测试进度）
-./stop.sh ./generations/my_new_app status
-```
-
-### 手动操作
-
-文件都放在 `--project-dir` 下。
-
-```bash
-PROJECT=combined-harness/generations/my_new_app
-
-# === 暂停（可恢复）：60 秒轮询一次，rm 后继续 ===
-touch $PROJECT/AGENT_STOP
-rm $PROJECT/AGENT_STOP
-
-# === 硬退出（不可恢复）：跑完当前 iteration 就 break，进程退出 ===
-touch $PROJECT/AGENT_QUIT
-
-# === 注入新指令（通过 steer hook，读完自动清空）===
-echo "改用 TypeScript，并补单元测试" > $PROJECT/STEER.md
-
-# === 看当前进度 ===
-python -c "import json; d=json.load(open('$PROJECT/feature_list.json')); print(sum(t['passes'] for t in d),'/',len(d))"
-
-# === 看 commit 历史 ===
-git -C $PROJECT log --oneline
-
-# === 跑完后启动生成的应用 ===
-cd $PROJECT && ./init.sh
-```
-
-### 全部退出方式
-
-| 方式 | 触发 | 语义 | 是否可恢复 |
-|---|---|---|---|
-| `Ctrl+C` | 终端按键 | 立即中断 asyncio loop | ✓ 跑相同命令续上 |
-| `touch AGENT_STOP` | 信号文件 | **暂停**，60s 轮询，loop 不退出 | ✓ `rm` 后继续 |
-| `touch AGENT_QUIT` | 信号文件 | 跑完当前 iteration 后退出 | ✗ 进程结束 |
-| `kill <pid>` | SIGTERM | 收到信号后跑完当前 iteration 退出 | ✗ 进程结束 |
-| `--max-iterations N` | 启动参数 | 跑满 N 轮自动退出 | ✗ 进程结束 |
-| `--max-runtime 4h` | 启动参数 | 墙钟时间到自动退出 | ✗ 进程结束 |
-| `--max-stall N` | 启动参数 | 连续 N 次 NEEDS_WORK 后退出 | ✗ 进程结束 |
-| 全部 test PASS | 自动 | 所有用例通过自然终止 | ✗ 任务完成 |
-
-`AGENT_QUIT` / SIGTERM / `--max-*` 都会跑最终 `commit_checkpoint` + 输出 `LOOP COMPLETE — <原因>` 摘要，不会留烂尾。
+所有退出都会做最终 git commit，不会留烂尾。
 
 ---
 
-## 命令行参数
+## 定制
 
-| 参数 | 说明 | 默认 |
-|---|---|---|
-| `--project-dir` | 项目生成目录；相对路径会拼到 `generations/` 下 | `./project` |
-| `--max-iterations` | 最大循环轮数 | 无限 |
-| `--max-runtime` | 墙钟时间上限，支持 `4h` / `30m` / `90s` / 纯秒数 | 无限 |
-| `--max-stall` | 连续 N 次 NEEDS_WORK 后自动退出，防卡死 | 关闭 |
-| `--model` | Claude 模型 ID | `claude-sonnet-4-5-20250929` |
+| 想改什么 | 怎么改 |
+|---|---|
+| 模型 | `--model claude-opus-4-7` |
+| 启用浏览器测试 | `--puppeteer` |
+| Bash 白名单 | 编辑 `hooks.py` 的 `ALLOWED_COMMANDS` |
+| Evaluator 工具 | 编辑 `evaluator.py` 的 `EVALUATOR_TOOLS`（不建议加 Write/Edit） |
+| Agent 行为/性格 | 编辑 `prompts/` 下的 `.md` 文件 |
+
+---
+
+## 常见问题
+
+**"第一次跑了 10 分钟还没动静"**
+正常。Initializer 在生成测试用例，期间没有可见输出。看到 `[Builder Tool: Write]` 才说明在落盘。
+
+**"Builder 卡在某个 feature 反复跑不过"**
+`python harness.py stop my-app pause`，手动改一下 `feature_list.json` 中该 feature 的描述，然后 `resume`。
+
+**"Evaluator 总是 PASS / 总是 NEEDS_WORK"**
+编辑 `prompts/evaluator_prompt.md` 调整审查严格度。
+
+**"想看完整的 Agent 输出"**
+`python harness.py run my-app 2>&1 | tee run.log`
 
 ---
 
@@ -189,92 +190,22 @@ cd $PROJECT && ./init.sh
 
 ```
 combined-harness/
-├── main.py            # 入口：参数解析 + asyncio.run(run_loop)
-├── stop.sh            # 手动停止/暂停/恢复/状态查看脚本
+├── harness.py         # 统一入口（init / run / dashboard / stop / steer）
+├── main.py            # 底层入口（harness.py run 的实现）
+├── stop.sh            # Shell 版停止脚本（可选）
+├── dashboard.py       # Web 看板服务器
 ├── loop.py            # 主循环：BUILD → COMMIT → EVAL → FEED
-├── builder.py         # Builder Agent 工厂（全权工具 + Puppeteer + 全 hooks）
-├── evaluator.py       # Evaluator Agent 工厂（只读 + 验证输出格式）
-├── hooks.py           # 6 个 PreToolUse hooks（见下）
-├── progress.py        # feature_list.json 统计 + UI 输出
-├── prompts.py         # prompt 文件加载工具
+├── tracker.py         # 状态/历史数据采集（.harness/ 目录）
+├── builder.py         # Builder Agent 工厂
+├── evaluator.py       # Evaluator Agent 工厂
+├── hooks.py           # PreToolUse hooks（安全 + 证据门 + 操作员控制）
+├── progress.py        # feature_list.json 统计
+├── prompts.py         # prompt 加载工具
 ├── prompts/
-│   ├── app_spec.template.txt   # spec 模板（你的起点）
-│   ├── app_spec.txt            # 当前实际 spec（DevTools 示例）
+│   ├── app_spec.template.txt   # spec 模板
 │   ├── initializer_prompt.md   # 首次 Session 指令
-│   ├── coding_prompt.md        # 后续 Builder Session 指令
+│   ├── coding_prompt.md        # 后续 Builder 指令
 │   └── evaluator_prompt.md     # Evaluator 审查指令
 ├── requirements.txt
-└── generations/                # 所有产物默认输出到这里
+└── generations/                # 项目产物输出目录
 ```
-
----
-
-## Hooks 一览（防御纵深）
-
-`hooks.py` 注册了 6 个 `PreToolUse` hook，按工具匹配：
-
-| Hook | 匹配工具 | 作用 |
-|---|---|---|
-| `kill_switch_hook` | `*` | 存在 `./AGENT_STOP` 时阻断所有工具调用 |
-| `steer_hook` | `*` | 把 `./STEER.md` 内容一次性注入给 Agent 后清空 |
-| `bash_security_hook` | `Bash` | Bash 命令白名单（npm / node / git / ls / cat / 等） |
-| `track_read_hook` | `Read` | 记录哪些证据文件（截图、日志）被读过 |
-| `verify_gate_hook` | `Write\|Edit` | 没读过证据前，不允许修改 `feature_list.json` 的 `passes: true` |
-| (Builder-only) | — | 上面这些都加到 Builder；Evaluator 只装 kill_switch + bash_security |
-
----
-
-## 定制点
-
-### 1. 改模型
-```bash
-python main.py --project-dir ./my_app --model claude-opus-4-7
-```
-或在 `main.py:21` 改 `DEFAULT_MODEL`。
-
-### 2. 调测试规模
-[prompts/initializer_prompt.md](prompts/initializer_prompt.md) 第 16 行附近的 "80 tests" 改成你想要的数量。
-
-### 3. 放宽/收紧 Bash 白名单
-[hooks.py](hooks.py) 的 `ALLOWED_BASH_PREFIXES` 列表。注意：放太宽 = 失去安全保证；放太紧 = Agent 卡住。
-
-### 4. 给 Evaluator 多/少给工具
-[evaluator.py:20](evaluator.py) 的 `EVALUATOR_TOOLS`。强烈建议**不要**给 `Write` / `Edit`，否则 Evaluator 会被诱惑去改代码而不是审查。
-
-### 5. 换 Puppeteer 用的浏览器
-[builder.py:88-95](builder.py) 的 `PUPPETEER_EXECUTABLE_PATH` 环境变量。
-
-### 6. 改 Initializer / Builder / Evaluator 的"性格"
-分别改 [prompts/initializer_prompt.md](prompts/initializer_prompt.md) / [prompts/coding_prompt.md](prompts/coding_prompt.md) / [prompts/evaluator_prompt.md](prompts/evaluator_prompt.md)。
-
----
-
-## 常见问题
-
-**"第一次跑了 10 分钟还没动静，是不是卡了？"**  
-没。Initializer 在写 80~200 条 test case，期间不会有可见的工具输出。看到 `[Builder Tool: Write]` 才说明 feature_list.json 在落盘。
-
-**"Builder 卡在某个 feature 反复跑不过怎么办？"**  
-`touch AGENT_STOP` 暂停，手动改一下 feature 描述或 `feature_list.json`，删掉 `AGENT_STOP` 继续。
-
-**"Evaluator 总是 PASS，是不是太宽松？"**  
-改 [prompts/evaluator_prompt.md](prompts/evaluator_prompt.md) 强化"对抗式审查"的指令，例如"默认 NEEDS_WORK，除非有明确截图证据"。
-
-**"想看 Builder 和 Evaluator 互相吵了什么？"**  
-两个 Session 的全文都在 stdout，可以 `python main.py ... 2>&1 | tee run.log`。
-
-**"Puppeteer 报错 找不到 Chrome"**  
-改 [builder.py](builder.py) 的 `PUPPETEER_EXECUTABLE_PATH`。Linux 上一般是 `/usr/bin/google-chrome`。
-
----
-
-## 与其他 harness 的对比
-
-| | autonomous-coding | claude-code-config | **combined-harness** |
-|---|---|---|---|
-| 多 Session 自动循环 | ✓ | ✗（需自己写 loop） | ✓ |
-| 独立 Evaluator | ✗ | ✗ | ✓ |
-| Hooks（kill / steer / verify-gate） | 部分 | ✓ | ✓ |
-| 反馈闭环 | ✗ | ✗ | ✓ |
-| Token 消耗 | 中 | 低 | 高 |
-| 适合 | 学习 / Demo | 已有项目加约束 | **全新项目，无人值守** |

@@ -1,5 +1,5 @@
 """
-Core Loop: Build → Evaluate → Feedback
+Core Loop: Build -> Evaluate -> Feedback
 =======================================
 
 Orchestrates the builder and evaluator agents in a quality loop.
@@ -22,13 +22,14 @@ from builder import create_builder_client
 from evaluator import create_evaluator_client, parse_verdict
 from progress import print_session_header, print_progress_summary, count_passing_tests
 from prompts import get_initializer_prompt, get_coding_prompt, get_evaluator_prompt, copy_spec_to_project
+from tracker import write_status, append_history
 
 
 AUTO_CONTINUE_DELAY = 3
 
 
 def parse_duration(s: str) -> int:
-    """Parse '4h' / '30m' / '90s' / pure int seconds → seconds."""
+    """Parse '4h' / '30m' / '90s' / pure int seconds -> seconds."""
     s = s.strip().lower()
     if s.endswith("h"):
         return int(float(s[:-1]) * 3600)
@@ -153,7 +154,7 @@ async def run_loop(
     """
     print("\n" + "=" * 70)
     print("  COMBINED AUTONOMOUS CODING HARNESS")
-    print("  Build → Evaluate → Feedback Loop")
+    print("  Build -> Evaluate -> Feedback Loop")
     print("=" * 70)
     print(f"\n  Project:     {project_dir}")
     print(f"  Model:       {model}")
@@ -189,6 +190,22 @@ async def run_loop(
     start_time = time.monotonic()
     exit_reason: Optional[str] = None
 
+    def _track(phase: str, **kwargs):
+        passing, total = count_passing_tests(project_dir)
+        write_status(
+            project_dir,
+            iteration=iteration,
+            phase=phase,
+            passing=passing,
+            total=total,
+            model=model,
+            start_time=start_time,
+            consecutive_stall=consecutive_stall,
+            **kwargs,
+        )
+
+    _track("STARTING")
+
     while True:
         iteration += 1
 
@@ -216,6 +233,7 @@ async def run_loop(
         # === Pause (does NOT exit, polls until released) ===
         if (project_dir / "AGENT_STOP").exists():
             print("\nKill switch engaged. Remove AGENT_STOP to resume.")
+            _track("PAUSED", paused=True)
             await asyncio.sleep(60)
             iteration -= 1  # Don't count this
             continue
@@ -230,6 +248,8 @@ async def run_loop(
         # PHASE 1: BUILD
         # =============================================
         print_session_header(iteration, is_first_run, phase="BUILD")
+        _track("BUILD")
+        build_t0 = time.monotonic()
 
         builder = create_builder_client(
             project_dir, model,
@@ -266,10 +286,14 @@ async def run_loop(
         # =============================================
         await commit_checkpoint(project_dir)
 
+        build_seconds = time.monotonic() - build_t0
+
         # =============================================
         # PHASE 3: EVALUATE
         # =============================================
         print_session_header(iteration, False, phase="EVALUATE")
+        _track("EVALUATE")
+        eval_t0 = time.monotonic()
 
         eval_client = create_evaluator_client(project_dir, model)
         eval_prompt = get_evaluator_prompt()
@@ -277,6 +301,7 @@ async def run_loop(
         async with eval_client:
             _, eval_response = await run_agent_session(eval_client, eval_prompt, label="Evaluator")
 
+        eval_seconds = time.monotonic() - eval_t0
         verdict, eval_findings = parse_verdict(eval_response)
 
         # =============================================
@@ -301,12 +326,26 @@ async def run_loop(
                 )
                 break
 
+        passing, total = count_passing_tests(project_dir)
+        append_history(
+            project_dir,
+            iteration=iteration,
+            verdict=verdict,
+            passing=passing,
+            total=total,
+            build_seconds=build_seconds,
+            eval_seconds=eval_seconds,
+            findings_summary=eval_findings,
+        )
+        _track("IDLE")
+
         print_progress_summary(project_dir)
         print(f"\nNext iteration in {AUTO_CONTINUE_DELAY}s...\n")
         await asyncio.sleep(AUTO_CONTINUE_DELAY)
 
     # Final commit
     await commit_checkpoint(project_dir)
+    _track("COMPLETE", exit_reason=exit_reason)
 
     # Final summary
     print("\n" + "=" * 70)

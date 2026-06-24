@@ -21,7 +21,7 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int]:
         return 0, 0
 
     try:
-        content = tests_file.read_text()
+        content = tests_file.read_text(encoding="utf-8")
         if not content.strip():
             return 0, 0
         tests = json.loads(content)
@@ -53,7 +53,7 @@ def print_progress_summary(project_dir: Path) -> None:
         pct = (passing / total) * 100
         bar_len = 30
         filled = int(bar_len * passing / total)
-        bar = "█" * filled + "░" * (bar_len - filled)
+        bar = "#" * filled + "-" * (bar_len - filled)
         print(f"\n  Progress: [{bar}] {passing}/{total} ({pct:.1f}%)")
     else:
         print("\n  Progress: feature_list.json not yet created")

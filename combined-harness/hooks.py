@@ -272,7 +272,7 @@ async def steer_hook(input_data, tool_use_id=None, context=None, *, project_dir:
     """
     steer_file = project_dir / "STEER.md"
     if steer_file.exists() and steer_file.stat().st_size > 0:
-        content = steer_file.read_text().strip()
+        content = steer_file.read_text(encoding="utf-8").strip()
         steer_file.write_text("")
         return {
             "decision": "block",
