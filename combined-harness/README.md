@@ -113,6 +113,24 @@ my_new_app/
 
 ## 运行时操作
 
+### 使用 stop.sh 脚本（推荐）
+
+```bash
+# 暂停（agent 在下次轮询时停住，最多 60s）
+./stop.sh ./generations/my_new_app pause
+
+# 恢复
+./stop.sh ./generations/my_new_app resume
+
+# 退出（跑完当前 iteration 后进程结束）
+./stop.sh ./generations/my_new_app quit
+
+# 查看当前状态（暂停/退出信号 + 测试进度）
+./stop.sh ./generations/my_new_app status
+```
+
+### 手动操作
+
 文件都放在 `--project-dir` 下。
 
 ```bash
@@ -172,6 +190,7 @@ cd $PROJECT && ./init.sh
 ```
 combined-harness/
 ├── main.py            # 入口：参数解析 + asyncio.run(run_loop)
+├── stop.sh            # 手动停止/暂停/恢复/状态查看脚本
 ├── loop.py            # 主循环：BUILD → COMMIT → EVAL → FEED
 ├── builder.py         # Builder Agent 工厂（全权工具 + Puppeteer + 全 hooks）
 ├── evaluator.py       # Evaluator Agent 工厂（只读 + 验证输出格式）

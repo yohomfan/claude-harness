@@ -7,20 +7,17 @@
     cp app_spec.template.txt app_spec.txt
     然后填充每一段；标 [REQUIRED] 的必填，[OPTIONAL] 可整段删掉。
 
-  这份文件会被 Initializer Agent 读取一次，并据此生成 ~80 条 e2e
-  测试用例（feature_list.json）。**写得越具体，生成的测试越准。**
+  这份文件会被 Initializer Agent 读取一次，并据此生成测试用例
+  （feature_list.json）。**写得越具体，生成的测试越准。**
 
   几条经验：
-  1. 钉死技术栈与端口。不要让 Agent 在 React / Vue 之间自己选；
-     不要让它在 3000/5173/8080 之间随机挑——后续截图脚本要写死 URL。
-  2. 钉死颜色（hex）和字体。"现代风格" 是不可验证的；
-     "#4f46e5 indigo, Inter font" 是可验证的。
-  3. <features> 段每条 feature 列出具体行为、边界条件、错误处理。
+  1. 钉死技术栈。不要让 Agent 在 React / Vue 之间自己选。
+  2. 每条 feature 列出具体行为、边界条件、错误处理。
      "用户能登录" 太虚；"邮箱+密码表单，邮箱格式校验，成功跳 /dashboard，
      失败在表单下方显示红色错误" 才能拆成测试。
-  4. 不要自己写测试用例——Initializer 会从 spec 推。你的活是写 spec。
-  5. 当前 harness 用 Puppeteer 截图作为证据，所以这套模板默认目标是
-     **Web 应用**。其他形态（CLI / 桌面）需要额外改 hooks。
+  3. 不要自己写测试用例——Initializer 会从 spec 推。你的活是写 spec。
+  4. 这套模板以 Web 应用为例。其他形态（CLI / API 服务 / 库）可以删除
+     UI 相关的段落，只保留 features 和 success_criteria。
   =================================================================
 -->
 

@@ -9,15 +9,17 @@ This is a FRESH context window — you have no memory of previous sessions.
 pwd && ls -la
 cat feature_list.json | python3 -c "import json,sys; d=json.load(sys.stdin); f=[t for t in d if not t.get('passes')]; print(f'{len(d)-len(f)}/{len(d)} passing'); [print(f'  TODO: {t[\"description\"]}') for t in f[:15]]"
 git log --oneline -5
+cat app_spec.txt
 ```
 
-### STEP 2: START DEV SERVER
+### STEP 2: SET UP ENVIRONMENT
 
+If an `init.sh` script exists, run it to start the dev environment:
 ```bash
 chmod +x init.sh && ./init.sh
 ```
 
-Wait for the server to be ready on port 5173 before proceeding.
+Otherwise, read the project files and set up the environment as appropriate.
 
 ### STEP 3: BATCH IMPLEMENT AND VERIFY
 
@@ -25,22 +27,22 @@ Wait for the server to be ready on port 5173 before proceeding.
 
 Work in batches — group related features and test them together:
 
-1. Pick 5-10 related failing tests (e.g., all JSON tool tests, or all SEO tests)
-2. Check if the code already implements them (it often does from session 1)
-3. For each test: navigate to the page, perform the steps, take a screenshot
-4. Read the screenshot to satisfy the evidence gate
+1. Pick 5-10 related failing tests from feature_list.json
+2. Check if the code already implements them (it often does from earlier sessions)
+3. For each test: run the verification steps described in the test case
+4. Capture evidence (screenshots, console output, test logs) and Read it
 5. Update feature_list.json to mark passing tests
 6. `git commit` after each batch
 
 **Speed tips:**
 - Many features are ALREADY IMPLEMENTED but just not verified — test first, code later
-- Group related screenshots: one screenshot can cover multiple tests
+- Group related evidence: one screenshot or test run can cover multiple tests
 - Don't write progress reports — your git commits and feature_list.json ARE the progress
 - Don't re-verify old passing tests unless the evaluator flagged regressions
 
 ### STEP 4: UPDATE feature_list.json
 
-**EVIDENCE GATE IS ACTIVE:** You must Read a screenshot or evidence file
+**EVIDENCE GATE IS ACTIVE:** You must Read evidence (screenshot, console log, test output)
 BEFORE modifying feature_list.json. The verify-gate hook will block writes otherwise.
 
 ```json
@@ -56,19 +58,10 @@ BEFORE modifying feature_list.json. The verify-gate hook will block writes other
 git add . && git commit -m "Verify [batch description] - N/total tests passing"
 ```
 
-### BROWSER AUTOMATION
-
-Use Puppeteer MCP tools for all testing:
-- `mcp__puppeteer__puppeteer_navigate` — go to URL
-- `mcp__puppeteer__puppeteer_screenshot` — capture proof
-- `mcp__puppeteer__puppeteer_click` — click elements
-- `mcp__puppeteer__puppeteer_fill` — fill inputs
-- `mcp__puppeteer__puppeteer_evaluate` — run JS in browser
-
 ### KEY RULES
 
 - **Maximize throughput** — verify as many tests as possible, not just one
-- **Evidence is mandatory** — but one screenshot can cover multiple related tests
+- **Evidence is mandatory** — but one piece of evidence can cover multiple related tests
 - **Fix bugs only when found** — don't refactor working code
 - **No progress reports** — don't create or update claude-progress.txt
 - **No summaries** — end the session by committing, not by writing reports

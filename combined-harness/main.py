@@ -58,6 +58,12 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MODEL,
         help=f"Claude model to use (default: {DEFAULT_MODEL})",
     )
+    parser.add_argument(
+        "--puppeteer",
+        action="store_true",
+        default=False,
+        help="Enable Puppeteer MCP for browser-based testing (default: off)",
+    )
     return parser.parse_args()
 
 
@@ -85,6 +91,7 @@ async def _run(args: argparse.Namespace, project_dir: Path) -> None:
         max_runtime_seconds=max_runtime_seconds,
         max_stall=args.max_stall,
         shutdown_event=shutdown,
+        enable_puppeteer=args.puppeteer,
     )
 
 

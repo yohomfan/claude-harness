@@ -2,11 +2,13 @@
 Builder Client Factory
 ======================
 
-Creates the builder ClaudeSDKClient with full tools, Puppeteer MCP,
-and all hooks (security + evidence gate + operator controls).
+Creates the builder ClaudeSDKClient with full tools and all hooks
+(security + evidence gate + operator controls).
+Puppeteer MCP is optional — pass enable_puppeteer=True to include it.
 """
 
 import json
+import platform
 from functools import partial
 from pathlib import Path
 
@@ -36,34 +38,53 @@ PUPPETEER_TOOLS = [
 BUILTIN_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
 
 
-def create_builder_client(project_dir: Path, model: str) -> ClaudeSDKClient:
+def _is_sandbox_supported() -> bool:
+    return platform.system() in ("Darwin", "Linux")
+
+
+def create_builder_client(
+    project_dir: Path,
+    model: str,
+    *,
+    system_prompt: str | None = None,
+    enable_puppeteer: bool = False,
+) -> ClaudeSDKClient:
     """
     Create a builder ClaudeSDKClient with multi-layered security.
 
-    Security layers (defense in depth):
-    1. Sandbox — OS-level bash command isolation
-    2. Permissions — file operations restricted to project_dir only
-    3. Bash allowlist hook — only permitted commands can run
-    4. Evidence gate — can't mark tests passing without reading evidence
-    5. Operator controls — kill-switch and steer hooks
+    Args:
+        project_dir: Working directory for the agent.
+        model: Claude model ID.
+        system_prompt: Custom system prompt. If None, uses a generic default.
+        enable_puppeteer: Whether to include Puppeteer MCP for browser testing.
     """
-    # Clear evidence log at session start
     clear_evidence_log(project_dir)
 
-    # Security settings
+    allowed_tools = [*BUILTIN_TOOLS]
+    tool_permissions = [
+        "Read(./**)",
+        "Write(./**)",
+        "Edit(./**)",
+        "Glob(./**)",
+        "Grep(./**)",
+        "Bash(*)",
+    ]
+    mcp_servers = {}
+
+    if enable_puppeteer:
+        allowed_tools.extend(PUPPETEER_TOOLS)
+        tool_permissions.extend(PUPPETEER_TOOLS)
+        mcp_servers["puppeteer"] = {
+            "command": "npx",
+            "args": ["puppeteer-mcp-server"],
+        }
+
+    use_sandbox = _is_sandbox_supported()
     security_settings = {
-        "sandbox": {"enabled": True, "autoAllowBashIfSandboxed": True},
+        "sandbox": {"enabled": use_sandbox, "autoAllowBashIfSandboxed": use_sandbox},
         "permissions": {
             "defaultMode": "acceptEdits",
-            "allow": [
-                "Read(./**)",
-                "Write(./**)",
-                "Edit(./**)",
-                "Glob(./**)",
-                "Grep(./**)",
-                "Bash(*)",
-                *PUPPETEER_TOOLS,
-            ],
+            "allow": tool_permissions,
         },
     }
 
@@ -72,39 +93,29 @@ def create_builder_client(project_dir: Path, model: str) -> ClaudeSDKClient:
     with open(settings_file, "w") as f:
         json.dump(security_settings, f, indent=2)
 
-    # Bind project_dir to hooks that need it
     bound_kill_switch = partial(kill_switch_hook, project_dir=project_dir)
     bound_steer = partial(steer_hook, project_dir=project_dir)
     bound_track_read = partial(track_read_hook, project_dir=project_dir)
     bound_verify_gate = partial(verify_gate_hook, project_dir=project_dir)
 
+    if system_prompt is None:
+        system_prompt = (
+            "You are an expert developer working on a long-running autonomous coding task. "
+            "An independent evaluator will review your work after this session — "
+            "leave thorough evidence (screenshots, console logs, test output)."
+        )
+
     return ClaudeSDKClient(
         options=ClaudeCodeOptions(
             model=model,
-            system_prompt=(
-                "You are an expert full-stack developer building a production-quality "
-                "web application. An independent evaluator will review your work after "
-                "this session — leave thorough evidence (screenshots, console logs)."
-            ),
-            allowed_tools=[*BUILTIN_TOOLS, *PUPPETEER_TOOLS],
-            mcp_servers={
-                "puppeteer": {
-                    "command": "npx",
-                    "args": ["puppeteer-mcp-server"],
-                    "env": {
-                        "PUPPETEER_EXECUTABLE_PATH": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                    },
-                }
-            },
+            system_prompt=system_prompt,
+            allowed_tools=allowed_tools,
+            mcp_servers=mcp_servers if mcp_servers else None,
             hooks={
                 "PreToolUse": [
-                    # Kill switch and steer on ALL tools
                     HookMatcher(matcher="*", hooks=[bound_kill_switch, bound_steer]),
-                    # Bash security
                     HookMatcher(matcher="Bash", hooks=[bash_security_hook]),
-                    # Track evidence reads
                     HookMatcher(matcher="Read", hooks=[bound_track_read]),
-                    # Verify gate on Write|Edit
                     HookMatcher(matcher="Write|Edit", hooks=[bound_verify_gate]),
                 ],
             },

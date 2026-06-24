@@ -8,6 +8,7 @@ evidence from a fresh context without trusting the builder's assessment.
 """
 
 import json
+import platform
 from functools import partial
 from pathlib import Path
 
@@ -20,6 +21,10 @@ from hooks import bash_security_hook, kill_switch_hook
 EVALUATOR_TOOLS = ["Read", "Glob", "Grep", "Bash"]
 
 
+def _is_sandbox_supported() -> bool:
+    return platform.system() in ("Darwin", "Linux")
+
+
 def create_evaluator_client(project_dir: Path, model: str) -> ClaudeSDKClient:
     """
     Create a restricted evaluator ClaudeSDKClient.
@@ -30,9 +35,9 @@ def create_evaluator_client(project_dir: Path, model: str) -> ClaudeSDKClient:
     - No steer or evidence hooks (only kill-switch and bash security)
     - Lower max_turns (evaluation is shorter than building)
     """
-    # Read-only security settings
+    use_sandbox = _is_sandbox_supported()
     security_settings = {
-        "sandbox": {"enabled": True, "autoAllowBashIfSandboxed": True},
+        "sandbox": {"enabled": use_sandbox, "autoAllowBashIfSandboxed": use_sandbox},
         "permissions": {
             "defaultMode": "acceptEdits",
             "allow": [

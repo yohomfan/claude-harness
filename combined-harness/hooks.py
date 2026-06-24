@@ -289,7 +289,7 @@ async def steer_hook(input_data, tool_use_id=None, context=None, *, project_dir:
 # Evidence Gate (from claude-code-config/hooks/track-read.sh + verify-gate.sh)
 # ===========================================================================
 
-EVIDENCE_PATTERNS = ["*/screenshots/*", "*-console.txt", "*-result.txt", "*.png"]
+DEFAULT_EVIDENCE_PATTERNS = ["*/screenshots/*", "*-console.txt", "*-result.txt", "*.png", "*.log"]
 RESULTS_FILENAME = "feature_list.json"
 
 
@@ -304,7 +304,10 @@ def clear_evidence_log(project_dir: Path) -> None:
         log_file.write_text("")
 
 
-async def track_read_hook(input_data, tool_use_id=None, context=None, *, project_dir: Path, **kwargs):
+async def track_read_hook(
+    input_data, tool_use_id=None, context=None, *, project_dir: Path,
+    evidence_patterns: list[str] | None = None, **kwargs,
+):
     """
     Record which evidence files (screenshots, console logs) the agent has opened.
     verify_gate_hook consults this before allowing writes to the results file.
@@ -313,7 +316,8 @@ async def track_read_hook(input_data, tool_use_id=None, context=None, *, project
     if not file_path:
         return {}
 
-    is_evidence = any(fnmatch.fnmatch(file_path, pat) for pat in EVIDENCE_PATTERNS)
+    patterns = evidence_patterns or DEFAULT_EVIDENCE_PATTERNS
+    is_evidence = any(fnmatch.fnmatch(file_path, pat) for pat in patterns)
 
     if is_evidence and Path(file_path).exists():
         log_file = _evidence_log_path(project_dir)

@@ -136,6 +136,8 @@ async def run_loop(
     max_runtime_seconds: Optional[int] = None,
     max_stall: Optional[int] = None,
     shutdown_event: Optional[asyncio.Event] = None,
+    enable_puppeteer: bool = False,
+    system_prompt: Optional[str] = None,
 ) -> None:
     """
     Main build-evaluate-feedback loop.
@@ -229,7 +231,11 @@ async def run_loop(
         # =============================================
         print_session_header(iteration, is_first_run, phase="BUILD")
 
-        builder = create_builder_client(project_dir, model)
+        builder = create_builder_client(
+            project_dir, model,
+            system_prompt=system_prompt,
+            enable_puppeteer=enable_puppeteer,
+        )
 
         if is_first_run:
             prompt = get_initializer_prompt()

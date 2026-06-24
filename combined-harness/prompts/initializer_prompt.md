@@ -13,8 +13,7 @@ before proceeding.
 
 Based on `app_spec.txt`, create a file called `feature_list.json` with detailed
 end-to-end test cases. This file is the single source of truth for what
-needs to be built. Scale the number of tests to the project size — aim for
-80 tests for a medium project (like this one with 5 tools + SEO + ads + analytics).
+needs to be built. Scale the number of tests to match the project's complexity.
 
 **Format:**
 ```json
@@ -23,7 +22,7 @@ needs to be built. Scale the number of tests to the project size — aim for
     "category": "functional",
     "description": "Brief description of the feature and what this test verifies",
     "steps": [
-      "Step 1: Navigate to relevant page",
+      "Step 1: Set up precondition",
       "Step 2: Perform action",
       "Step 3: Verify expected result"
     ],
@@ -33,8 +32,7 @@ needs to be built. Scale the number of tests to the project size — aim for
 ```
 
 **Requirements for feature_list.json:**
-- Scale to project size: ~80 for this medium project (5 tools + SEO + analytics + ads)
-- Both "functional" and "style" categories
+- Scale to project complexity (small project: ~20-30, medium: ~50-80, large: ~100-200)
 - Mix of narrow tests (2-5 steps) and comprehensive tests (10+ steps)
 - At least 5 tests MUST have 10+ steps each
 - Order features by priority: fundamental features first
@@ -48,7 +46,7 @@ Never remove features, never edit descriptions, never modify testing steps.
 
 **EVIDENCE GATE:**
 A verify-gate hook is active. You CANNOT modify feature_list.json unless you have
-first Read a screenshot or console-log evidence file. The hook will block the write.
+first Read evidence (screenshot, console log, test output). The hook will block the write.
 Always capture and Read evidence before updating test results.
 
 ### SECOND TASK: Create init.sh
@@ -62,7 +60,7 @@ set up and run the development environment. The script should:
 ### THIRD TASK: Initialize Git
 
 Create a git repository and make your first commit with:
-- feature_list.json (complete with all 200+ features)
+- feature_list.json (complete with all features)
 - init.sh (environment setup script)
 - README.md (project overview)
 
@@ -73,7 +71,7 @@ Set up the basic project structure based on `app_spec.txt`.
 ### OPTIONAL: Start Implementation
 
 If you have time, begin implementing highest-priority features.
-Remember: work on ONE feature at a time, verify with screenshots.
+Remember: work on ONE feature at a time, verify with evidence.
 
 ### ENDING THIS SESSION
 
@@ -84,4 +82,4 @@ Before your context fills up:
 4. Leave the environment in a clean, working state
 
 **Note:** An independent evaluator will review your work after this session.
-Leave thorough evidence (screenshots, logs) for the reviewer.
+Leave thorough evidence (screenshots, logs, test output) for the reviewer.
