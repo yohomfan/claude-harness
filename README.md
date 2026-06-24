@@ -1,5 +1,7 @@
 # Claude Harness
 
+> **[English Version (README.en.md)](README.en.md)**
+
 围绕 **Claude Code / Claude Agent SDK** 的长时运行（long-running）自主编码 Agent 的实验与参考实现集合。
 
 本仓库包含三套相互独立、可互相借鉴的 harness 工程，以及几篇关于 long-running agent 设计原则的参考资料。
