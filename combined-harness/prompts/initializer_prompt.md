@@ -32,6 +32,8 @@ needs to be built. Scale the number of tests to match the project's complexity.
 ```
 
 **Requirements for feature_list.json:**
+- The FIRST test MUST be a scaffold smoke test: "project installs, compiles,
+  and the dev server boots / build succeeds" — the foundation's health check.
 - Scale to project complexity (small project: ~20-30, medium: ~50-80, large: ~100-200)
 - Mix of narrow tests (2-5 steps) and comprehensive tests (10+ steps)
 - At least 5 tests MUST have 10+ steps each
@@ -64,9 +66,34 @@ Create a git repository and make your first commit with:
 - init.sh (environment setup script)
 - README.md (project overview)
 
+**Commit message convention — Conventional Commits** `<type>(<scope>): <subject>`
+(type = feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert).
+If a `.gitmessage` template exists in the project root, run
+`git config commit.template .gitmessage` and follow it. Use e.g.
+`chore: initial project scaffold` for the first commit.
+
 ### FOURTH TASK: Create Project Structure
 
 Set up the basic project structure based on `app_spec.txt`.
+
+### FIFTH TASK: VERIFY THE SCAFFOLD BUILDS (MANDATORY — do not skip)
+
+A scaffold full of files that don't compile is worthless. Before ending this
+session you MUST prove the foundation actually builds and runs:
+
+1. Run `init.sh` (or the project's install + dev/build command) to install
+   dependencies and start the dev server / produce a build.
+2. Capture evidence it works: a successful build log, a dev server responding,
+   or a screenshot of the booted app. Read that evidence (the evidence gate
+   requires it before you can mark anything passing).
+3. Mark the FIRST smoke test ("project installs, compiles, dev server boots")
+   as `"passes": true`, backed by that evidence.
+4. If install or compile FAILS, you MUST fix it now (missing deps, bad config,
+   syntax errors, missing entry files) and retry until it builds. Do NOT end
+   the session with a scaffold that cannot compile.
+
+This guarantees the next agent inherits a foundation that actually runs — not a
+pile of stubs that may not even build.
 
 ### OPTIONAL: Start Implementation
 

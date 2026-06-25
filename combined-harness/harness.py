@@ -53,6 +53,12 @@ def cmd_init(args):
     if template.exists():
         shutil.copy(template, dest)
 
+    # Drop a Conventional Commits message template; the Initializer agent will
+    # `git init` and run `git config commit.template .gitmessage` (see prompt).
+    gitmessage = PROMPTS_DIR / "gitmessage.template"
+    if gitmessage.exists():
+        shutil.copy(gitmessage, project_dir / ".gitmessage")
+
     print("=" * 60)
     print("  Project initialized!")
     print("=" * 60)

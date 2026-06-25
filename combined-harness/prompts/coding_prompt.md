@@ -54,9 +54,15 @@ BEFORE modifying feature_list.json. The verify-gate hook will block writes other
 
 ### STEP 5: COMMIT FREQUENTLY
 
+Use **Conventional Commits** format: `<type>(<scope>): <subject>`
+(type = feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)
+
 ```bash
-git add . && git commit -m "Verify [batch description] - N/total tests passing"
+git add . && git commit -m "test(health): verify vaccine batch — N/total passing"
+git add . && git commit -m "fix(pet): correct soft-delete filter"
 ```
+
+If a `.gitmessage` template or `COMMIT_CONVENTION.md` exists in the project, follow it.
 
 ### KEY RULES
 

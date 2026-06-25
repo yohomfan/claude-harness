@@ -1,0 +1,32 @@
+# <type>(<scope>): <subject>
+#
+# ——— Conventional Commits 1.0（源自 Angular commit guidelines）———
+#
+# type:    feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert
+#   feat     新功能
+#   fix      修 bug
+#   docs     文档
+#   style    格式（不影响代码逻辑：空格/分号/排版）
+#   refactor 重构（既非新功能也非修 bug）
+#   perf     性能优化
+#   test     测试
+#   build    构建系统/依赖
+#   ci       CI 配置
+#   chore    杂务（不改 src 的维护性提交，如 session checkpoint）
+#   revert   回滚某次提交
+#
+# scope:   可选，改动的模块/子系统
+#
+# subject: 祈使句、≤50 字、句尾不加句号（用 "add" 而非 "added/adds"）
+#
+# 示例：
+#   feat(auth): add demo one-click login for H5
+#   fix(list): correct empty-state rendering
+#   chore: session checkpoint
+#
+# ——— Body（可选）———
+# 与标题空一行；每行 ≤72 字；解释 what & why，而非 how。
+#
+# ——— Footer（可选）———
+# BREAKING CHANGE: <破坏性变更说明>
+# Closes #123

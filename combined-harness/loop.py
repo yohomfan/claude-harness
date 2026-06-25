@@ -120,7 +120,7 @@ async def commit_checkpoint(project_dir: Path) -> None:
     if diff.returncode != 0 or cached.returncode != 0:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         proc = await asyncio.create_subprocess_exec(
-            "git", "commit", "-am", f"session checkpoint: {timestamp}",
+            "git", "commit", "-am", f"chore: session checkpoint {timestamp}",
             cwd=str(project_dir),
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
