@@ -9,6 +9,7 @@ evidence from a fresh context without trusting the builder's assessment.
 
 import json
 import platform
+import re
 from functools import partial
 from pathlib import Path
 
@@ -77,23 +78,52 @@ def create_evaluator_client(project_dir: Path, model: str) -> ClaudeSDKClient:
     )
 
 
+# A verdict line either IS, or ENDS WITH, a standalone PASS / NEEDS_WORK token
+# (tolerating markdown like **PASS** and a glued preamble like
+# "...examining evidence.PASS"). The token must sit at the end of the line so we
+# don't match it mid-sentence.
+_VERDICT_TAIL = re.compile(r"(NEEDS[ _]WORK|PASS)[\s*`#:.\-]*$", re.IGNORECASE)
+
+
 def parse_verdict(response: str) -> tuple[str, str | None]:
     """
-    Parse evaluator response. First line should be PASS or NEEDS_WORK.
+    Parse the evaluator's PASS / NEEDS_WORK verdict from its full response.
+
+    LLMs often prepend a preamble ("I'll review...") before the verdict and may
+    glue the token onto it ("...evidence.PASS"), so the first line alone cannot
+    be trusted. We scan every line for a trailing verdict token and take the
+    LAST one — the evaluator typically restates its conclusion in a closing
+    summary. Everything else becomes the findings.
 
     Returns:
-        (verdict, findings) where verdict is "PASS" or "NEEDS_WORK"
-        and findings is the evaluator's detailed feedback (None on PASS).
+        (verdict, findings) where verdict is "PASS" or "NEEDS_WORK" and findings
+        is the evaluator's detailed feedback (None on a clean PASS).
     """
-    lines = response.strip().split("\n")
-    first_line = lines[0].strip() if lines else ""
+    verdict: str | None = None
+    body: list[str] = []
 
-    if first_line == "PASS":
-        evidence = "\n".join(lines[1:]).strip() if len(lines) > 1 else ""
-        return "PASS", evidence or None
-    elif first_line == "NEEDS_WORK":
-        findings = "\n".join(lines[1:]).strip() if len(lines) > 1 else response.strip()
-        return "NEEDS_WORK", findings
-    else:
-        # Could not parse — treat as NEEDS_WORK with full response
+    for line in response.strip().split("\n"):
+        match = _VERDICT_TAIL.search(line.strip())
+        if match:
+            token = match.group(1).upper().replace(" ", "_")
+            verdict = "NEEDS_WORK" if token.startswith("NEEDS") else "PASS"
+            # Keep any text before the verdict token (e.g. the glued preamble).
+            remainder = _VERDICT_TAIL.sub("", line).rstrip()
+            if remainder:
+                body.append(remainder)
+        else:
+            body.append(line)
+
+    findings = "\n".join(body).strip() or None
+
+    if verdict is None:
+        # No verdict token anywhere — flag loudly instead of silently "passing".
+        print(
+            "[parse_verdict] WARNING: no PASS/NEEDS_WORK found in evaluator "
+            "response; defaulting to NEEDS_WORK"
+        )
         return "NEEDS_WORK", response.strip()
+
+    if verdict == "PASS":
+        return "PASS", findings
+    return "NEEDS_WORK", findings or response.strip()
