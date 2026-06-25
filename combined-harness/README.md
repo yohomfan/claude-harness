@@ -92,6 +92,67 @@ Agent 会在下次工具调用时读到这条指令并调整行为。
 
 ---
 
+## 运行控制（启动后怎么管）
+
+### 原理：控制和「怎么启动」无关
+
+控制的本质是往 `--project-dir` 目录里写**信号文件**，`run_loop` 每轮都会轮询读取：
+
+| 信号文件 | 作用 | 生效时机 |
+|---|---|---|
+| `AGENT_STOP` | 暂停（不退出，循环原地轮询） | ≤60s |
+| `AGENT_QUIT` | 跑完当前轮后**优雅退出** | 当前轮结束 |
+| `STEER.md` | 注入新指令给 Agent，读后自动清空 | 下次工具调用 |
+
+所以无论你用 `main.py` 还是 `harness.py` 启动，都能控制——区别只是 `harness.py` 把「写信号文件」封装成了子命令，`main.py` 需要你手动 `touch`。
+
+### main.py ↔ harness.py 可混用
+
+两者**目录解析完全一致**（相对路径 → `generations/<name>`，绝对路径原样），所以即使用 `main.py` 启动，也能用 `harness.py` 控制**同一个目录**：
+
+```bash
+# 用 main.py 启动……
+python main.py --project-dir ./my-app
+
+# ……另开终端，用 harness.py 控制同一任务：
+python harness.py stop      my-app pause     # 暂停
+python harness.py stop      my-app status    # 看状态
+python harness.py dashboard my-app           # 看板
+python harness.py steer     my-app "改用 xxx" # 注入指令
+```
+
+### 限制运行时长（先到先停）
+
+`run` 支持 4 种自动停条件，可叠加，哪个先满足先停（详见上方 [run 参数](#run-参数)）：
+
+| 参数 | 含义 |
+|---|---|
+| `--max-iterations N` | 最多跑 N 轮 |
+| `--max-runtime T` | 最多跑多久（`2h` / `30m` / `90s`） |
+| `--max-stall N` | 连续 N 轮 NEEDS_WORK 就停（防卡死） |
+| （自然完成） | 所有 test 通过 |
+
+```bash
+# 最多 10 轮，但连续卡 3 轮就别浪费了
+python harness.py run my-app --max-iterations 10 --max-stall 3
+```
+
+### ⚠️ Windows 注意
+
+`main.py` 在 Windows 上无法注册 SIGTERM 处理器（`add_signal_handler` 不可用，代码已 `pass`），所以 **`kill <pid>` / SIGTERM 不会优雅退出**。Windows 下请用 `AGENT_QUIT`（跑完本轮退出）或终端 `Ctrl+C`。
+
+### 外部绝对路径目录
+
+项目不在 `generations/` 下时，直接传绝对路径即可：
+
+```bash
+python harness.py run       D:/Project/github/MaoJi-uni --max-iterations 5 --puppeteer
+python harness.py stop      D:/Project/github/MaoJi-uni pause
+python harness.py dashboard D:/Project/github/MaoJi-uni
+```
+
+---
+
 ## Web 看板（Dashboard）
 
 ```bash
@@ -148,7 +209,7 @@ python harness.py dashboard my-app
 |---|---|---|
 | `Ctrl+C` | 立即中断 | ✓ 跑 `run` 续上 |
 | `harness.py stop ... pause` | 暂停，60s 轮询 | ✓ `resume` 恢复 |
-| `harness.py stop ... quit` | 跑完当前轮退出 | ✗ |
+| `harness.py stop ... quit` / `AGENT_QUIT` | 跑完当前轮**优雅退出**（跨平台） | ✗ |
 | `--max-iterations N` | 跑满 N 轮 | ✗ |
 | `--max-runtime 4h` | 墙钟时间到 | ✗ |
 | `--max-stall N` | 连续 N 次 NEEDS_WORK | ✗ |
