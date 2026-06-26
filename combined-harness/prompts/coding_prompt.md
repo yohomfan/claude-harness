@@ -66,6 +66,11 @@ If a `.gitmessage` template or `COMMIT_CONVENTION.md` exists in the project, fol
 
 ### KEY RULES
 
+- **Fix what you find — don't stop at diagnosis.** If a test fails because of a
+  missing asset (icon, image, font, seed file), GENERATE it. If you spot a defect
+  (broken image, error state, stub page), fix it this session. "I identified the
+  bug" is NOT done — a problem you found but didn't fix still counts as failing.
+  If the evaluator sent findings, address them FIRST before new work.
 - **Maximize throughput** — verify as many tests as possible, not just one
 - **Evidence is mandatory** — but one piece of evidence can cover multiple related tests
 - **Fix bugs only when found** — don't refactor working code
