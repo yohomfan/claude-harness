@@ -118,11 +118,21 @@ def parse_verdict(response: str) -> tuple[str, str | None]:
 
     if verdict is None:
         # No verdict token anywhere — flag loudly instead of silently "passing".
+        # Prefix the findings so the builder sees this is unparsed raw output,
+        # NOT vetted review feedback (an empty/garbled NEEDS_WORK misleads it).
         print(
             "[parse_verdict] WARNING: no PASS/NEEDS_WORK found in evaluator "
             "response; defaulting to NEEDS_WORK"
         )
-        return "NEEDS_WORK", response.strip()
+        body_text = response.strip()
+        if body_text:
+            flagged = (
+                "[evaluator gave no explicit PASS/NEEDS_WORK verdict — treat the "
+                "following as raw notes, not vetted findings]\n" + body_text
+            )
+        else:
+            flagged = "[evaluator produced no verdict and no output — re-evaluation needed]"
+        return "NEEDS_WORK", flagged
 
     if verdict == "PASS":
         return "PASS", findings

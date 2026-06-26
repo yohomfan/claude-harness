@@ -26,6 +26,7 @@ from tracker import write_status, append_history
 
 
 AUTO_CONTINUE_DELAY = 3
+EVAL_MAX_ATTEMPTS = 2  # retry the evaluator on transient session/API errors
 
 
 def parse_duration(s: str) -> int:
@@ -295,13 +296,41 @@ async def run_loop(
         _track("EVALUATE")
         eval_t0 = time.monotonic()
 
-        eval_client = create_evaluator_client(project_dir, model)
-        eval_prompt = get_evaluator_prompt()
-
-        async with eval_client:
-            _, eval_response = await run_agent_session(eval_client, eval_prompt, label="Evaluator")
+        # Run the evaluator, retrying on transient session/API errors so a
+        # mid-review crash doesn't get parsed into a bogus verdict.
+        eval_status, eval_response = "error", ""
+        for attempt in range(1, EVAL_MAX_ATTEMPTS + 1):
+            eval_client = create_evaluator_client(project_dir, model)
+            async with eval_client:
+                eval_status, eval_response = await run_agent_session(
+                    eval_client, get_evaluator_prompt(), label="Evaluator"
+                )
+            if eval_status != "error":
+                break
+            print(f"[Evaluator] session failed (attempt {attempt}/{EVAL_MAX_ATTEMPTS}). Retrying...")
+            await asyncio.sleep(AUTO_CONTINUE_DELAY)
 
         eval_seconds = time.monotonic() - eval_t0
+
+        # If the evaluator never completed (e.g. API outage), do NOT fabricate a
+        # NEEDS_WORK with empty findings — a verdict with no reason just misleads
+        # the builder, who then can't know what to fix. Skip feedback this round.
+        if eval_status == "error":
+            print("\n  >>> EVALUATOR UNAVAILABLE — no verdict produced; skipping feedback this round <<<")
+            passing, total = count_passing_tests(project_dir)
+            append_history(
+                project_dir, iteration=iteration, verdict="ERROR",
+                passing=passing, total=total,
+                build_seconds=build_seconds, eval_seconds=eval_seconds,
+                findings_summary="Evaluator session failed to complete; no verdict produced.",
+            )
+            findings = None  # carry nothing misleading into the next round
+            _track("IDLE")
+            print_progress_summary(project_dir)
+            print(f"\nNext iteration in {AUTO_CONTINUE_DELAY}s...\n")
+            await asyncio.sleep(AUTO_CONTINUE_DELAY)
+            continue
+
         verdict, eval_findings = parse_verdict(eval_response)
 
         # =============================================
