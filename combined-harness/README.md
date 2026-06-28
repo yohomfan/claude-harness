@@ -57,6 +57,7 @@ python harness.py dashboard my-app
 |---|---|
 | `python harness.py init <project>` | 创建新项目，拷贝 spec 模板 |
 | `python harness.py run <project>` | 启动 Build → Evaluate → Feedback 循环 |
+| `python harness.py extend <project> [--requirements ...]` | 把新需求追加成测试用例（不重启 Initializer） |
 | `python harness.py dashboard <project>` | 打开 Web 看板（实时监控） |
 | `python harness.py stop <project> [action]` | 暂停 / 恢复 / 退出 / 查看状态 |
 | `python harness.py steer <project> <message>` | 运行中注入新指令 |
@@ -89,6 +90,41 @@ python harness.py steer my-app "改用 TypeScript，并补单元测试"
 ```
 
 Agent 会在下次工具调用时读到这条指令并调整行为。
+
+### extend（项目已建好后追加新需求）
+
+项目第一次 build 完之后，新需求来了——不需要 `--reinit` 也不需要手改 `feature_list.json`，跑一个**一次性 Extender Agent** 让它把新需求拆成测试条目追加进去：
+
+```bash
+# 内联文本（适合 1-2 条简短需求）
+python harness.py extend my-app --requirements "新增暗色模式切换；导出 JSON 时支持下载 .zip"
+
+# 从文件读（适合较长的需求文档）
+python harness.py extend my-app --requirements-file new_features.md
+
+# 或从 stdin
+cat new_features.md | python harness.py extend my-app
+```
+
+Extender Agent 会做的事：
+1. 读 `app_spec.txt` 理解项目上下文（技术栈、约定）
+2. 读现有 `feature_list.json` 学习已有的测试风格、粒度、category
+3. 把新需求拆成测试条目（与原有格式一致，**全部 `passes: false`**）
+4. **追加**到 `feature_list.json` 末尾——绝不动已有条目
+5. 自动 `git commit "feat(spec): extend feature_list with N tests for ..."`
+
+之后 `harness.py run my-app` 续跑就会自动捡起这些新的 `passes: false` 条目去实现。
+
+**关键约束**（由 `prompts/extender_prompt.md` 和 `extender.py` 的系统提示强制）：
+- Append-only：禁止修改、删除、重排已有条目
+- 全部 `passes: false`：Extender 不能宣称任何测试通过（那是 Builder + Evaluator 的活）
+- 不实现功能、不跑 dev server、不截图——只编辑 `feature_list.json` 一个文件
+
+**典型流程**：
+```bash
+python harness.py extend my-app --requirements "..."   # 1. 加新需求
+python harness.py run    my-app                         # 2. 让循环把新测试做掉
+```
 
 ---
 
@@ -190,6 +226,7 @@ python harness.py dashboard my-app
 - **Builder Agent**：全权工具（Read / Write / Edit / Bash），可选 Puppeteer MCP
 - **Evaluator Agent**：**只读权限**（Read / Glob / Grep / Bash），独立审查，第一行输出 `PASS` 或 `NEEDS_WORK`
 - **反馈注入**：`NEEDS_WORK` 反馈拼到下一轮 Builder prompt 开头
+- **Extender Agent**（按需，由 `harness.py extend` 触发）：append-only 编辑 `feature_list.json`，把新需求拆成 `passes: false` 测试，不进入循环
 
 ### 安全机制（Hooks）
 
@@ -259,6 +296,7 @@ combined-harness/
 ├── tracker.py         # 状态/历史数据采集（.harness/ 目录）
 ├── builder.py         # Builder Agent 工厂
 ├── evaluator.py       # Evaluator Agent 工厂
+├── extender.py        # Extender Agent 工厂（harness.py extend 用）
 ├── hooks.py           # PreToolUse hooks（安全 + 证据门 + 操作员控制）
 ├── progress.py        # feature_list.json 统计
 ├── prompts.py         # prompt 加载工具
@@ -266,7 +304,8 @@ combined-harness/
 │   ├── app_spec.template.txt   # spec 模板
 │   ├── initializer_prompt.md   # 首次 Session 指令
 │   ├── coding_prompt.md        # 后续 Builder 指令
-│   └── evaluator_prompt.md     # Evaluator 审查指令
+│   ├── evaluator_prompt.md     # Evaluator 审查指令
+│   └── extender_prompt.md      # Extender 追加指令（append-only 约束）
 ├── requirements.txt
 └── generations/                # 项目产物输出目录
 ```

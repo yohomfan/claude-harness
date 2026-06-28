@@ -7,6 +7,7 @@ One command to rule them all:
 
     python harness.py init   <project>                   # Create a new project from template
     python harness.py run    <project> [options]          # Start the build-evaluate loop
+    python harness.py extend <project> [requirements]     # Append new requirements as test cases
     python harness.py dashboard <project> [--port 8077]   # Open the web monitoring dashboard
     python harness.py stop   <project> [action]           # pause / resume / quit / status
     python harness.py steer  <project> <message>          # Inject instructions mid-run
@@ -122,6 +123,103 @@ def cmd_run(args):
         asyncio.run(_run())
     except KeyboardInterrupt:
         print("\n\nInterrupted. To resume: python harness.py run " + args.project)
+
+
+# ─── extend ─────────────────────────────────────────────────────────
+
+def cmd_extend(args):
+    project_dir = resolve_project_dir(args.project)
+
+    if not project_dir.exists():
+        print(f"Project not found: {project_dir}")
+        print(f"Initialize first: python harness.py init {args.project}")
+        sys.exit(1)
+
+    feature_file = project_dir / "feature_list.json"
+    if not feature_file.exists():
+        print(f"No feature_list.json in {project_dir}.")
+        print("`extend` works on existing projects. Run `python harness.py run "
+              f"{args.project}` once to let the Initializer create it.")
+        sys.exit(1)
+
+    # Resolve requirements text — file > inline > stdin
+    if args.requirements_file:
+        req_path = Path(args.requirements_file)
+        if not req_path.exists():
+            print(f"Requirements file not found: {req_path}")
+            sys.exit(1)
+        requirements = req_path.read_text(encoding="utf-8").strip()
+    elif args.requirements:
+        requirements = " ".join(args.requirements).strip()
+    else:
+        print("Reading requirements from stdin (Ctrl+D to finish)...")
+        requirements = sys.stdin.read().strip()
+
+    if not requirements:
+        print("Empty requirements — nothing to extend.")
+        sys.exit(1)
+
+    # Snapshot for delta reporting + post-run validation
+    try:
+        before = json.loads(feature_file.read_text(encoding="utf-8"))
+        before_count = len(before) if isinstance(before, list) else 0
+    except (json.JSONDecodeError, OSError):
+        print(f"WARNING: {feature_file.name} is unreadable before extend. Aborting.")
+        sys.exit(1)
+
+    async def _run():
+        from extender import create_extender_client
+        from loop import run_agent_session
+        from prompts import get_extender_prompt
+
+        prompt = (
+            get_extender_prompt()
+            + "\n\n---\n\n## NEW REQUIREMENTS\n\n"
+            + requirements
+        )
+
+        client = create_extender_client(project_dir, args.model)
+        async with client:
+            status, _ = await run_agent_session(client, prompt, label="Extender")
+
+        if status == "error":
+            print("\nExtender session failed.")
+            sys.exit(1)
+
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        return
+
+    # Post-run validation: JSON must still parse and grow (not shrink/change)
+    try:
+        after = json.loads(feature_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        print(f"\nERROR: feature_list.json is now invalid JSON: {e}")
+        print("Run `git diff feature_list.json` in the project to investigate.")
+        sys.exit(1)
+
+    if not isinstance(after, list):
+        print(f"\nERROR: feature_list.json is no longer a JSON array.")
+        sys.exit(1)
+
+    after_count = len(after)
+    added = after_count - before_count
+
+    print()
+    print("=" * 60)
+    if added > 0:
+        print(f"  Extended: +{added} new tests ({before_count} -> {after_count})")
+    elif added == 0:
+        print(f"  No new tests added. Total unchanged at {after_count}.")
+    else:
+        print(f"  WARNING: feature_list.json SHRANK by {-added} entries "
+              f"({before_count} -> {after_count}).")
+        print("  The extender was supposed to append only. Run "
+              "`git diff feature_list.json` to inspect.")
+    print("=" * 60)
+    print(f"\n  Next: python harness.py run {args.project}\n")
 
 
 # ─── dashboard ──────────────────────────────────────────────────────
@@ -257,6 +355,25 @@ def main():
     p_run.add_argument("--model", type=str, default=DEFAULT_MODEL, help=f"Model ID (default: {DEFAULT_MODEL})")
     p_run.add_argument("--puppeteer", action="store_true", default=False, help="Enable Puppeteer browser testing")
 
+    # extend
+    p_ext = sub.add_parser(
+        "extend",
+        help="Append new requirements as additional test cases (passes:false)",
+    )
+    p_ext.add_argument("project", help="Project name or path")
+    p_ext.add_argument(
+        "--requirements", nargs="+", default=None,
+        help="New requirements as inline text",
+    )
+    p_ext.add_argument(
+        "--requirements-file", type=str, default=None,
+        help="Path to a file containing the new requirements (md/txt)",
+    )
+    p_ext.add_argument(
+        "--model", type=str, default=DEFAULT_MODEL,
+        help=f"Model ID (default: {DEFAULT_MODEL})",
+    )
+
     # dashboard
     p_dash = sub.add_parser("dashboard", help="Open the web monitoring dashboard")
     p_dash.add_argument("project", help="Project name or path")
@@ -279,6 +396,7 @@ def main():
     commands = {
         "init": cmd_init,
         "run": cmd_run,
+        "extend": cmd_extend,
         "dashboard": cmd_dashboard,
         "stop": cmd_stop,
         "steer": cmd_steer,

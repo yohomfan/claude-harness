@@ -30,6 +30,10 @@ def get_evaluator_prompt() -> str:
     return load_prompt("evaluator_prompt")
 
 
+def get_extender_prompt() -> str:
+    return load_prompt("extender_prompt")
+
+
 def copy_spec_to_project(project_dir: Path) -> None:
     """Copy the app spec into the project directory for the agent to read."""
     spec_dest = project_dir / "app_spec.txt"
